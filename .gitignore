@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# uv
+.venv/
+
+# CMake / scikit-build
+cmake-build-*/
+_scikit_build/
+*.cmake
+
+# cibuildwheel
+wheelhouse/
+
+# Accidental large fixture copies (prefer symlinks or OMCWA_FIXTURE_DIR)
+tests/fixtures/*.cwa
+tests/fixtures/*.wav
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
