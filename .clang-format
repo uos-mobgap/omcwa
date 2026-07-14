@@ -1,0 +1,12 @@
+# clang-format for omcwa native bridge only
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+ColumnLimit: 80
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+ReferenceAlignment: Left
+SpaceAfterCStyleCast: false
