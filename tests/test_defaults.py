@@ -92,7 +92,7 @@ def test_backend_constructors_use_defaults() -> None:
 
 
 def test_is_default_calibrate() -> None:
-    """Default OmConvertCalibrate is recognized for the fast path."""
+    """Default OmConvertCalibrate is recognised for the fast path."""
     assert _is_default_calibrate(OmConvertCalibrate()) is True
 
 

@@ -1,10 +1,9 @@
 # omcwa
 
-**omcwa** loads OpenMovement `.cwa` recordings (accelerometer and optional
-gyroscope), applies omconvert-compatible auto-calibration, and resamples streams
-to a uniform sample rate. The default backends vendor the OpenMovement
-**omconvert** C engine via pybind11, producing output aligned with **omgui**
-export behaviour.
+**omcwa** loads OpenMovement `.cwa` recordings from **AX3**/**AX6** devices, applies omconvert-compatible
+auto-calibration, and resamples streams to a uniform sample rate. The default
+backends vendor the OpenMovement **omconvert** C engine via pybind11, producing
+output aligned with **omgui** export behaviour.
 
 ## Install
 
@@ -24,29 +23,52 @@ cd omcwa
 uv sync
 ```
 
-Requires **Python 3.11–3.14** and a C++17 toolchain for editable builds.
+Requires **Python 3.11-3.14** and a C++17 toolchain for editable builds.
 
 ## Quickstart
 
 ```python
-from omcwa import process_cwa
+from omcwa import load_cwa, process_cwa
 
 out = process_cwa("recording.cwa")
 
 print(out.sample_rate_hz)          # file default rate (omgui "auto")
-print(out.acc.shape, out.gyr.shape)
+print(out.acc.shape)
+if out.gyr is not None:            # AX6, none on AX3
+    print(out.gyr.shape)
 print(out.calibration.success)     # auto-cal outcome
 print(out.calibration.error_code)  # non-zero when calibration failed
+
+raw = load_cwa("recording.cwa")
+print(raw.temp.shape)              # temperature (C), used during accel calibration
 ```
 
 `process_cwa` runs auto-calibration on the full on-disk recording (omgui-compatible),
 then resamples at the file default rate. Pass an explicit ``sample_rate_hz`` to
-target a different rate. Returned arrays are uniformly sampled
-`numpy` vectors with optional validity/clipping flags.
+target a different rate. Returned arrays are uniformly sampled `numpy` vectors
+with optional validity/clipping flags.
+
+### AX3 vs AX6
+
+| Device | Streams in output |
+|--------|-------------------|
+| **AX3** | `acc` |
+| **AX6** | `acc`, `gyr` |
+
+Auto-calibration fits accelerometer scale/offset (with temperature correction).
+Gyro is rescaled but not auto-calibrated.
+
+### Temperature
+
+Temperature is read from the CWA and used during accelerometer calibration.
+It is exposed on **`RawRecording`** and **`CalibratedRecording`** (e.g. via
+`load_cwa()` or injectable pipeline stages). The high-level **`ProcessedRecording`**
+returned by `process_cwa()` does not include a temperature array - only
+`acc`, optional `gyr`, timing, and calibration metadata.
 
 ## Modular backends
 
-Calibration and resampling are injectable. Pass `None` to skip a stage; pass a
+Calibration and resampling are injectable. Pass `None` to skip a stage. Pass a
 callable to replace the default omconvert backend.
 
 ```python
@@ -78,8 +100,8 @@ Custom callables receive typed recording objects (`RawRecording` →
 ## Calibration behaviour
 
 Auto-calibration searches for stationary segments and fits scale/offset
-parameters. When calibration cannot converge—as is common on short recordings—the
-engine **falls back to identity correction** but still reports the outcome:
+parameters. When calibration cannot converge (as is common on short recordings),
+the engine **falls back to identity correction** but still reports the outcome:
 
 - `Calibration.success` is `False`
 - `Calibration.error_code` is non-zero
@@ -107,16 +129,16 @@ uv run pytest -q
 
 Coding standards (Python + C++): [docs/coding-standards.md](docs/coding-standards.md).
 
-Parity tests compare `omgui_test.cwa` against
+Parity tests compare `omgui_test.cwa` (AX6 fixture) against
 `omgui_test_autocal_100res.wav` (omgui export: auto-calibrate on, 100 Hz).
 Place both under `tests/fixtures/`, or set `OMCWA_FIXTURE_DIR` to a directory
-that contains them. CI may run without fixtures; parity tests skip gracefully.
+that contains them. CI may run without fixtures. Parity tests skip gracefully.
 
 Wheel builds are defined in `.github/workflows/wheels.yml` (cibuildwheel across
-Linux, macOS, and Windows for CPython 3.11–3.14).
+Linux, macOS, and Windows for CPython 3.11-3.14).
 
 ## License
 
-**BSD-2-Clause** — see `LICENSE`.
+**BSD-2-Clause** - see `LICENSE`.
 
 Vendored OpenMovement omconvert sources are documented in `THIRD_PARTY_NOTICES.md`.

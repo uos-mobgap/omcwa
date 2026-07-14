@@ -26,7 +26,7 @@ from ``Scale-N`` entries in the LIST/INFO/ICMT comment:
 
     physical = int16 * (2 * range) / 65536
 
-Channels 0–2 are accelerometer (range 8 g on this fixture); channels 3–5 are
+Channels 0-2 are accelerometer (range 8 g on this fixture). Channels 3-5 are
 gyroscope (range 2000 dps). Auxiliary channels are ignored.
 
 Comparisons use LSB-aware tolerances on interior samples (edge transients

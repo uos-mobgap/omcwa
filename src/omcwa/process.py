@@ -108,7 +108,7 @@ def process_cwa(
         skip resampling.
     time_range :
         Optional ``(start, stop)`` window applied after processing. Auto-
-        calibration always uses the full file; the window only trims output.
+        calibration always uses the full file. The window only trims output.
 
     Notes
     -----

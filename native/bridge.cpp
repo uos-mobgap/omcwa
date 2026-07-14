@@ -104,7 +104,7 @@ class QuietNativeIo {
     bool active_ = false;
 };
 
-// Channel priority for OmConvertFindArrangement; duplicated here because
+// Channel priority for OmConvertFindArrangement, duplicated here because
 // defaultChannelPriority is static in omconvert.
 // ref: vendored/omconvert/omconvert.c:defaultChannelPriority:412
 static const om_convert_channel_t kDefaultChannelPriority[] = {
@@ -123,7 +123,7 @@ py::array_t<double> vec3_from_calibration(const double src[OMCALIBRATE_AXES]) {
     return arr;
 }
 
-// Return only the first session; omconvert skips session 2 and later.
+// Return only the first session. omconvert skips session 2 and later.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1146
 omdata_session_t* first_session(omdata_t* data) {
     return data->firstSession;
@@ -196,7 +196,7 @@ ChannelMap build_channel_map(const om_convert_arrangement_t& arrangement) {
 
 } // namespace
 
-// Python-facing wrapper around omcalibrate_calibration_t; success is derived
+// Python-facing wrapper around omcalibrate_calibration_t. success is derived
 // from error_code == 0 so callers can detect omconvert identity fallback.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1196
 class Calibration {
@@ -240,7 +240,7 @@ class Calibration {
 };
 
 // Owns a loaded omdata_t for the object lifetime (OmDataLoad on load,
-// OmDataFree on destruction). Copy is disabled; move transfers ownership.
+// OmDataFree on destruction). Copy is disabled. move transfers ownership.
 class LoadedCwa {
   public:
     static LoadedCwa load(const std::string& path) {
@@ -470,7 +470,7 @@ class LoadedCwa {
 
         om_convert_player_t player = {};
 
-        // sample_rate_hz <= 0 uses arrangement.defaultRate; interpolate is
+        // sample_rate_hz <= 0 uses arrangement.defaultRate. interpolate is
         // 1=nearest, 2=linear, 3=cubic (omgui default).
         // ref: vendored/omconvert/omconvert.c:OmConvertPlayerInitialize:747
         OmConvertPlayerInitialize(&player, &arrangement, sample_rate_hz,
@@ -529,7 +529,7 @@ class LoadedCwa {
 
             if (has_gyro) {
                 auto gyr_mut = gyr_arr.mutable_unchecked<2>();
-                // Gyro: scale raw counts only; omconvert calibrates only when
+                // Gyro: scale raw counts only. omconvert calibrates only when
                 // channel index c < OMCALIBRATE_AXES (accel under default
                 // priority).
                 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
@@ -575,7 +575,7 @@ Calibration identity_calibration() {
     return Calibration::from_native(native);
 }
 
-// One-shot load, calibrate, and resample; composes LoadedCwa methods.
+// One-shot load, calibrate, and resample. composes LoadedCwa methods.
 // Used by the Python fast path in src/omcwa/process.py.
 py::dict process_cwa_native(
     const std::string& path,
@@ -626,7 +626,7 @@ PYBIND11_MODULE(_native, m) {
                       "Reference temperature used during calibration.")
         .def_readonly("error_code", &Calibration::error_code,
                       R"doc(
-                0 on success; negative omconvert error code on identity
+                0 on success. negative omconvert error code on identity
                 fallback.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1196
             )doc")
@@ -651,7 +651,7 @@ PYBIND11_MODULE(_native, m) {
                 Run omconvert auto-calibration on the full recording.
 
                 sample_rate_hz: target rate for player-based stationary
-                    detection; 0 uses the file default rate.
+                    detection. 0 uses the file default rate.
                 interpolate: 1=nearest, 2=linear, 3=cubic (default is cubic).
                 stationary_time: minimum stationary period in seconds.
 
@@ -675,7 +675,7 @@ PYBIND11_MODULE(_native, m) {
 
                 sample_rate_hz: 0 uses arrangement.defaultRate.
                 interpolate: 1=nearest, 2=linear, 3=cubic.
-                Accel is calibrated; gyro is scaled only.
+                Accel is calibrated. Gyro is scaled only.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
             )doc");
 

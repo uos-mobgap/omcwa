@@ -20,7 +20,7 @@ class OmConvertCalibrate:
     """Auto-calibrate a recording using vendored omconvert.
 
     Reopens the source CWA and runs auto-calibration on the full recording.
-    Corrected accel is returned in memory; gyro is unchanged.
+    Corrected accel is returned in memory. Gyro is unchanged.
     """
 
     def __init__(
