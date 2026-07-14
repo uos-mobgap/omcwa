@@ -4,8 +4,8 @@
 
 namespace omcwa_defaults {
 
-constexpr double kDefaultSampleRateHz = kUseFileSampleRate;
 constexpr double kUseFileSampleRate = 0.0;
+constexpr double kDefaultSampleRateHz = kUseFileSampleRate;
 constexpr int kInterpolateNearest = 1;
 constexpr int kInterpolateLinear = 2;
 constexpr int kInterpolateCubic = 3;
