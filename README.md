@@ -23,7 +23,7 @@ cd omcwa
 uv sync
 ```
 
-Requires **Python 3.11-3.14** and a C++17 toolchain for editable builds.
+Requires Python 3.11-3.14 and a C++17 toolchain for editable builds.
 
 ## Quickstart
 
@@ -34,8 +34,10 @@ out = process_cwa("recording.cwa")
 
 print(out.sample_rate_hz)          # file default rate (omgui "auto")
 print(out.acc.shape)
+
 if out.gyr is not None:            # AX6, none on AX3
     print(out.gyr.shape)
+
 print(out.calibration.success)     # auto-cal outcome
 print(out.calibration.error_code)  # non-zero when calibration failed
 
@@ -64,7 +66,7 @@ Temperature is read from the CWA and used during accelerometer calibration.
 It is exposed on **`RawRecording`** and **`CalibratedRecording`** (e.g. via
 `load_cwa()` or injectable pipeline stages). The high-level **`ProcessedRecording`**
 returned by `process_cwa()` does not include a temperature array - only
-`acc`, optional `gyr`, timing, and calibration metadata.
+`acc`, `gyr`, timing, and calibration metadata.
 
 ## Modular backends
 
@@ -83,7 +85,6 @@ out = process_cwa("recording.cwa", sample_rate_hz=100.0)
 # Custom backends
 out = process_cwa(
     "recording.cwa",
-    sample_rate_hz=100.0,
     calibrate_fn=OmConvertCalibrate(stationary_time=15.0),
     resample_fn=OmConvertResample(sample_rate_hz=50.0),
 )
@@ -93,8 +94,8 @@ out = process_cwa("recording.cwa", calibrate_fn=None)
 out = process_cwa("recording.cwa", resample_fn=None)
 ```
 
-Custom callables receive typed recording objects (`RawRecording` →
-`CalibratedRecording` → `ProcessedRecording`) and must preserve
+Custom callables receive typed recording objects (`RawRecording` ->
+`CalibratedRecording` -> `ProcessedRecording`) and must preserve
 `metadata["source_path"]` when delegating to native code.
 
 ## Calibration behaviour
