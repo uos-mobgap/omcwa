@@ -24,6 +24,8 @@ jobs:
             cibw-build: "cp3{11,12,13,14}-manylinux_x86_64"
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/build-wheels
         with:
           cibw-build: ${{ matrix.cibw-build }}
@@ -54,6 +56,8 @@ jobs:
             cibw-build: "cp3{11,12,13,14}-win_arm64"
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/build-wheels
         with:
           cibw-build: ${{ matrix.cibw-build }}
