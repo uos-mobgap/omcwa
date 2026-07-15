@@ -11,7 +11,26 @@ on:
         default: "false"
 
 jobs:
+  build_wheels_smoke:
+    if: github.event_name == 'workflow_dispatch' && inputs.smoke == 'true'
+    name: Wheels on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-x86_64
+            os: ubuntu-latest
+            cibw-build: "cp3{11,12,13,14}-manylinux_x86_64"
+
+    steps:
+      - uses: ./.github/actions/build-wheels
+        with:
+          cibw-build: ${{ matrix.cibw-build }}
+          artifact-name: wheels-${{ matrix.name }}
+
   build_wheels:
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.smoke != 'true')
     name: Wheels on ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -34,29 +53,8 @@ jobs:
             os: windows-latest
             cibw-build: "cp3{11,12,13,14}-win_arm64"
 
-    # release: always all matrix entries
-    # manual: all entries unless smoke=true (then only ubuntu-x86_64)
-    if: |
-      github.event_name == 'release' ||
-      (github.event_name == 'workflow_dispatch' &&
-        (inputs.smoke != 'true' || matrix.name == 'ubuntu-x86_64'))
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.23.3
-        env:
-          CIBW_BUILD: ${{ matrix.cibw-build }}
-          CIBW_SKIP: "*-musllinux_* pp*"
-          CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
-          CIBW_TEST_REQUIRES: "numpy"
-          CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
-
-      # TODO: attach wheels to the gitHub release and/or upload to pypi.
-      # these are workflow artifacts only.
-      - uses: actions/upload-artifact@v4
+      - uses: ./.github/actions/build-wheels
         with:
-          name: wheels-${{ matrix.name }}
-          path: ./wheelhouse/*.whl
-          if-no-files-found: error
+          cibw-build: ${{ matrix.cibw-build }}
+          artifact-name: wheels-${{ matrix.name }}
