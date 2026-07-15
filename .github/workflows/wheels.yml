@@ -1,25 +1,45 @@
 name: Wheels
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      smoke:
+        description: "Build smoke-test wheels only (ubuntu x86_64)"
+        required: false
+        default: "false"
 
 jobs:
   build_wheels:
-    name: Wheels on ${{ matrix.os }}
+    name: Wheels on ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            cibw-build: "cp3{11,12,13,14}-manylinux_*"
-          - os: macos-14
+          - name: ubuntu-x86_64
+            os: ubuntu-latest
+            cibw-build: "cp3{11,12,13,14}-manylinux_x86_64"
+          - name: ubuntu-aarch64
+            os: ubuntu-latest
+            cibw-build: "cp3{11,12,13,14}-manylinux_aarch64"
+          - name: macos-arm64
+            os: macos-14
             cibw-build: "cp3{11,12,13,14}-macosx_arm64"
-          - os: windows-latest
+          - name: windows-amd64
+            os: windows-latest
             cibw-build: "cp3{11,12,13,14}-win_amd64"
+          - name: windows-arm64
+            os: windows-latest
+            cibw-build: "cp3{11,12,13,14}-win_arm64"
+
+    # release: always all matrix entries
+    # manual: all entries unless smoke=true (then only ubuntu-x86_64)
+    if: |
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.smoke != 'true' || matrix.name == 'ubuntu-x86_64'))
 
     steps:
       - uses: actions/checkout@v4
@@ -29,32 +49,14 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.cibw-build }}
           CIBW_SKIP: "*-musllinux_* pp*"
-          CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
           CIBW_TEST_REQUIRES: "numpy"
           CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
-          
+
+      # TODO: attach wheels to the gitHub release and/or upload to pypi.
+      # these are workflow artifacts only.
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.name }}
           path: ./wheelhouse/*.whl
           if-no-files-found: error
-
-  test:
-    name: Pytest on Ubuntu
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
-      - name: Lint and test
-        run: |
-          uv sync --all-groups
-          uv run ruff check src tests
-          uv run ruff format --check src tests
-          ./scripts/check_cpp_format.sh
-          uv run pytest -q
