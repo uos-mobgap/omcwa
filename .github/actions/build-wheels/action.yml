@@ -1,0 +1,30 @@
+name: Build wheels
+description: Build and upload cibuildwheel artifacts for one matrix leg
+
+inputs:
+  cibw-build:
+    description: CIBW_BUILD selector for this leg
+    required: true
+  artifact-name:
+    description: upload-artifact name
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.23.3
+      env:
+        CIBW_BUILD: ${{ inputs.cibw-build }}
+        CIBW_SKIP: "*-musllinux_* pp*"
+        CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
+        CIBW_TEST_REQUIRES: "numpy"
+        CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
+
+    # TODO: attach wheels to the github release and/or upload to pypi.
+    # these are workflow artifacts only.
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ./wheelhouse/*.whl
+        if-no-files-found: error

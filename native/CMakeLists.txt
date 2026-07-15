@@ -8,6 +8,7 @@ if(NOT WIN32)
 endif()
 
 add_library(omconvert STATIC ${OMCONVERT_SOURCES})
+set_target_properties(omconvert PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # omconvert includes stay PRIVATE on the C target
 # bridge gets its own include path
