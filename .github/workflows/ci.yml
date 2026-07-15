@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Lint and test
+        run: |
+          uv sync --all-groups
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+          ./scripts/check_cpp_format.sh
+          uv run pytest -q
