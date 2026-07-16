@@ -60,6 +60,17 @@ with optional validity/clipping flags.
 Auto-calibration fits accelerometer scale/offset (with temperature correction).
 Gyro is rescaled but not auto-calibrated.
 
+## Examples
+
+To run [`examples/showcase_omcwa.ipynb`](examples/showcase_omcwa.ipynb), install the
+showcase dependencies first:
+
+```bash
+uv sync --group showcase
+# or with pip from a checkout:
+pip install -e ".[showcase]"
+```
+
 ### Temperature
 
 Temperature is read from the CWA and used during accelerometer calibration.
@@ -94,9 +105,14 @@ out = process_cwa("recording.cwa", calibrate_fn=None)
 out = process_cwa("recording.cwa", resample_fn=None)
 ```
 
-Custom callables receive typed recording objects (`RawRecording` ->
-`CalibratedRecording` -> `ProcessedRecording`) and must preserve
-`metadata["source_path"]` when delegating to native code.
+Custom callables must match the `CalibrateFn` and `ResampleFn` shapes
+(`RawRecording -> CalibratedRecording` and
+`CalibratedRecording -> ProcessedRecording`). Return valid recording instances
+with consistent arrays and metadata for your implementation.
+
+When chaining a custom calibration hook with the default `OmConvertResample`,
+preserve `metadata["source_path"]` and set `metadata["_native_calibration"]`
+so the native resampler can reopen the file.
 
 ## Calibration behaviour
 

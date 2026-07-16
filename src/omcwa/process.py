@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 from omcwa import _native
@@ -21,9 +20,10 @@ from omcwa.resample import (
 )
 from omcwa.slice import slice_recording
 from omcwa.types import (
-    CalibratedRecording,
+    CalibrateFn,
     ProcessedRecording,
     RawRecording,
+    ResampleFn,
     ensure_path_str,
 )
 
@@ -79,12 +79,8 @@ def process_cwa(
     path: str | Path,
     *,
     sample_rate_hz: float = DEFAULT_SAMPLE_RATE_HZ,
-    calibrate_fn: Callable[[RawRecording], CalibratedRecording]
-    | None
-    | object = _UNSET,
-    resample_fn: Callable[[CalibratedRecording], ProcessedRecording]
-    | None
-    | object = _UNSET,
+    calibrate_fn: CalibrateFn | None | object = _UNSET,
+    resample_fn: ResampleFn | None | object = _UNSET,
     time_range: tuple[float, float] | None = None,
 ) -> ProcessedRecording:
     """Process a CWA file with optional calibration and resampling.
@@ -101,11 +97,11 @@ def process_cwa(
         Target uniform sample rate in Hz. ``0`` uses the file default rate
         (omgui "auto").
     calibrate_fn :
-        Calibration backend. Default is ``OmConvertCalibrate``. Pass ``None``
-        to skip auto-calibration (identity).
+        ``CalibrateFn`` backend. Default is ``OmConvertCalibrate``. Pass
+        ``None`` to skip auto-calibration (identity).
     resample_fn :
-        Resampling backend. Default is ``OmConvertResample``. Pass ``None`` to
-        skip resampling.
+        ``ResampleFn`` backend. Default is ``OmConvertResample``. Pass
+        ``None`` to skip resampling.
     time_range :
         Optional ``(start, stop)`` window applied after processing. Auto-
         calibration always uses the full file. The window only trims output.

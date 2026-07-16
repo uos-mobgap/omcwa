@@ -18,11 +18,21 @@ dev = [
     "pytest>=8",
     "ruff>=0.15.21",
 ]
+showcase = [
+    "ipykernel>=6.25",
+    "jupyter>=1.1",
+    "jupytext>=1.19",
+]
 
 [dependency-groups]
 dev = [
     "pytest>=8",
     "ruff>=0.15.21",
+]
+showcase = [
+    "ipykernel>=6.25",
+    "jupyter>=1.1",
+    "jupytext>=1.19",
 ]
 
 [tool.scikit-build]
