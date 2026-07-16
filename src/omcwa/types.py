@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -101,6 +102,13 @@ class ProcessedRecording:
     metadata: dict[str, Any]
     valid: npt.NDArray[np.bool_] | None = None
     clipped: npt.NDArray[np.bool_] | None = None
+
+
+# pipeline hook: raw samples -> calibrated recording.
+CalibrateFn: TypeAlias = Callable[[RawRecording], CalibratedRecording]
+
+# pipeline hook: calibrated recording -> uniformly resampled output.
+ResampleFn: TypeAlias = Callable[[CalibratedRecording], ProcessedRecording]
 
 
 def source_path(recording: RawRecording | CalibratedRecording) -> str:

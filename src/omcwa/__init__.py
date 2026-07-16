@@ -15,9 +15,11 @@ from omcwa.process import load_cwa, process_cwa
 from omcwa.resample import OmConvertResample
 from omcwa.types import (
     CalibratedRecording,
+    CalibrateFn,
     Calibration,
     ProcessedRecording,
     RawRecording,
+    ResampleFn,
 )
 
 __all__ = [
@@ -26,6 +28,8 @@ __all__ = [
     "process_cwa",
     "OmConvertCalibrate",
     "OmConvertResample",
+    "CalibrateFn",
+    "ResampleFn",
     "Calibration",
     "RawRecording",
     "CalibratedRecording",
