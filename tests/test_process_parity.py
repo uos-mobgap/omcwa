@@ -33,7 +33,7 @@ This scale is the Open Movement omconvert/omgui WAV contract:
 
 **References:**
 - Open Movement omconvert WAV import contract - `Scale-N` in `ICMT`, int16  -> physical units:
-  `https://github.com/openmovementproject/openmovement/blob/master/Software/AX3/omconvert/README.md` 
+  `https://github.com/openmovementproject/openmovement/blob/master/Software/AX3/omconvert/README.md`
 
 - omconvert write path uses the inverse scale `65536 / (2 * range)` when quantising to int16
   (`omconvert.c`) - decode is that inverse.
@@ -65,9 +65,9 @@ def _decode_omgui_wav(
 ) -> tuple[np.ndarray, np.ndarray, dict[int, float]]:
     """Decode an omgui-exported WAV.
 
-    Implements the omconvert WAV import contract: read ``Scale-N`` from the ``ICMT`` 
-    comment and recover physical units as ``int16 * (2 * range) / 65536``. 
-    
+    Implements the omconvert WAV import contract: read ``Scale-N`` from the ``ICMT``
+    comment and recover physical units as ``int16 * (2 * range) / 65536``.
+
     See module docstring “WAV decoding” for the README / ``omconvert.c`` references.
     """
     data = path.read_bytes()
