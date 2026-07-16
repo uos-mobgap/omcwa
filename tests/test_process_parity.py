@@ -29,6 +29,15 @@ from ``Scale-N`` entries in the LIST/INFO/ICMT comment:
 Channels 0-2 are accelerometer (range 8 g on this fixture). Channels 3-5 are
 gyroscope (range 2000 dps). Auxiliary channels are ignored.
 
+This scale is the Open Movement omconvert/omgui WAV contract:
+
+**References:**
+- Open Movement omconvert WAV import contract - `Scale-N` in `ICMT`, int16  -> physical units:
+  `https://github.com/openmovementproject/openmovement/blob/master/Software/AX3/omconvert/README.md` 
+
+- omconvert write path uses the inverse scale `65536 / (2 * range)` when quantising to int16
+  (`omconvert.c`) - decode is that inverse.
+
 Comparisons use LSB-aware tolerances on interior samples (edge transients
 trimmed). Exact float equality is inappropriate.
 """
@@ -54,7 +63,13 @@ LSB_MULTIPLIER = 1.5
 def _decode_omgui_wav(
     path: Path,
 ) -> tuple[np.ndarray, np.ndarray, dict[int, float]]:
-    """Decode an omgui-exported WAV without external dependencies."""
+    """Decode an omgui-exported WAV.
+
+    Implements the omconvert WAV import contract: read ``Scale-N`` from the ``ICMT`` 
+    comment and recover physical units as ``int16 * (2 * range) / 65536``. 
+    
+    See module docstring “WAV decoding” for the README / ``omconvert.c`` references.
+    """
     data = path.read_bytes()
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         msg = f"not a RIFF/WAVE file: {path}"
