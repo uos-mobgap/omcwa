@@ -51,8 +51,12 @@ class Calibration:
 
 
 @dataclass
-class RawRecording:
-    """CWA samples at the file default rate, with device/session metadata."""
+class UniformRecording:
+    """Uncalibrated IMU samples on a uniform grid at the file default rate.
+
+    Arrays are float64 in physical units (g for accelerometer, dps for
+    gyroscope). Calibration is identity (pre-cal / uncalibrated).
+    """
 
     time: npt.NDArray[np.float64]
     acc: npt.NDArray[np.float64]
@@ -60,18 +64,6 @@ class RawRecording:
     temp: npt.NDArray[np.float64] | None
     metadata: dict[str, Any]
     path: str | None = None
-
-    def slice(
-        self, start: float | None = None, stop: float | None = None
-    ) -> RawRecording:
-        """Return samples satisfying ``start <= time < stop``."""
-        from omcwa.slice import slice_recording
-
-        sliced = slice_recording(self, start=start, stop=stop)
-        if not isinstance(sliced, RawRecording):
-            msg = "slice_recording returned unexpected type for RawRecording"
-            raise TypeError(msg)
-        return sliced
 
 
 @dataclass
@@ -104,20 +96,19 @@ class ProcessedRecording:
     clipped: npt.NDArray[np.bool_] | None = None
 
 
-# pipeline hook: raw samples -> calibrated recording.
-CalibrateFn: TypeAlias = Callable[[RawRecording], CalibratedRecording]
+# pipeline hook: uniform pre-cal samples -> calibrated recording.
+CalibrateFn: TypeAlias = Callable[[UniformRecording], CalibratedRecording]
 
 # pipeline hook: calibrated recording -> uniformly resampled output.
 ResampleFn: TypeAlias = Callable[[CalibratedRecording], ProcessedRecording]
 
 
-def source_path(recording: RawRecording | CalibratedRecording) -> str:
+def source_path(recording: UniformRecording | CalibratedRecording) -> str:
     """Return the on-disk CWA path required by native omconvert backends."""
     if recording.path:
         return str(recording.path)
-    if "source_path" in recording.metadata:
-        return str(recording.metadata["source_path"])
-    msg = "Recording has no source_path. Cannot run native omconvert backend."
+
+    msg = "Recording has no path. Cannot run native omconvert backend."
     raise ValueError(msg)
 
 

@@ -41,14 +41,29 @@ if out.gyr is not None:            # AX6, none on AX3
 print(out.calibration.success)     # auto-cal outcome
 print(out.calibration.error_code)  # non-zero when calibration failed
 
-raw = load_cwa("recording.cwa")
-print(raw.temp.shape)              # temperature (C), used during accel calibration
+uniform = load_cwa("recording.cwa")
+print(uniform.temp.shape)          # temperature (C), used during accel calibration
 ```
 
 `process_cwa` runs auto-calibration on the full on-disk recording (omgui-compatible),
-then resamples at the file default rate. Pass an explicit ``sample_rate_hz`` to
-target a different rate. Returned arrays are uniformly sampled `numpy` vectors
-with optional validity/clipping flags.
+then resamples at the file default rate. Pass an explicit `sample_rate_hz` to
+target a different rate. Pass `time_range=(start, stop)` to trim output after
+processing (auto-calibration still uses the full file). Returned arrays are
+uniformly sampled `numpy` vectors with optional validity/clipping flags.
+
+For ad-hoc windows on any recording type, use `slice_recording` from
+`omcwa.slice` (`start <= time < stop`).
+
+### Naming
+
+| Type | Meaning |
+|------|---------|
+| **`UniformRecording`** | Uncalibrated (identity / pre-cal) samples on a uniform grid at the file default rate |
+| **`CalibratedRecording`** | Auto-calibrated (or identity) samples, still at the file default rate |
+| **`ProcessedRecording`** | Final resampled output from `process_cwa` |
+
+`load_cwa` returns a **`UniformRecording`**. That
+stage is uncalibrated float64 data, not raw device packets.
 
 ### AX3 vs AX6
 
@@ -74,10 +89,27 @@ pip install -e ".[showcase]"
 ### Temperature
 
 Temperature is read from the CWA and used during accelerometer calibration.
-It is exposed on **`RawRecording`** and **`CalibratedRecording`** (e.g. via
+It is exposed on **`UniformRecording`** and **`CalibratedRecording`** (e.g. via
 `load_cwa()` or injectable pipeline stages). The high-level **`ProcessedRecording`**
-returned by `process_cwa()` does not include a temperature array - only
-`acc`, `gyr`, timing, and calibration metadata.
+returned by `process_cwa()` does not include a temperature array. It keeps
+`acc`, `gyr`, timing, and calibration metadata only.
+
+## File handles and loading
+
+`open_cwa(path)` returns a **`CwaHandle`** that loads the file once into native
+memory. Reuse the handle across pipeline stages so calibrate and resample do not
+reload the CWA.
+
+`load_cwa(path)` is a convenience wrapper around `open_cwa(path).materialize()`.
+It returns a **`UniformRecording`** at the file default rate with identity
+calibration (uncalibrated float64 samples).
+
+```python
+from omcwa import open_cwa, load_cwa
+
+handle = open_cwa("recording.cwa")
+uniform = handle.materialize()   # same as load_cwa("recording.cwa")
+```
 
 ## Modular backends
 
@@ -93,6 +125,9 @@ out = process_cwa("recording.cwa")
 # Explicit resample rate
 out = process_cwa("recording.cwa", sample_rate_hz=100.0)
 
+# Trim output after processing (auto-cal still uses the full file)
+out = process_cwa("recording.cwa", time_range=(start, stop))
+
 # Custom backends
 out = process_cwa(
     "recording.cwa",
@@ -106,13 +141,36 @@ out = process_cwa("recording.cwa", resample_fn=None)
 ```
 
 Custom callables must match the `CalibrateFn` and `ResampleFn` shapes
-(`RawRecording -> CalibratedRecording` and
+(`UniformRecording -> CalibratedRecording` and
 `CalibratedRecording -> ProcessedRecording`). Return valid recording instances
-with consistent arrays and metadata for your implementation.
+with consistent arrays. Keep `path` set to the on-disk CWA path when the next
+stage is an omconvert backend.
 
-When chaining a custom calibration hook with the default `OmConvertResample`,
-preserve `metadata["source_path"]` and set `metadata["_native_calibration"]`
-so the native resampler can reopen the file.
+When chaining into `OmConvertResample`, set `metadata["_native_calibration"]`
+to a native calibration object (as `OmConvertCalibrate` and
+`uniform_to_calibrated_identity` do). Omconvert backends reuse
+`metadata["_cwa_handle"]` when present. If the handle is missing, they load
+from `recording.path`.
+
+Those two keys are pipeline-only. They are dropped when building a
+**`ProcessedRecording`**, so the final result does not keep the native file
+buffer alive.
+
+`OmConvertCalibrate(..., apply_to_arrays=False)` fits calibration and stores
+`_native_calibration` without rewriting accel arrays. `process_cwa` uses that
+when both stages are OmConvert on the slow path, because
+`OmConvertResample` applies calibration during the player pass.
+
+### Fast path
+
+When `calibrate_fn` and `resample_fn` are each `OmConvertCalibrate`,
+`OmConvertResample`, or `None`, `process_cwa` uses a single native `process`
+call (or one materialize when both stages are skipped). Any combination of
+those backends qualifies, including non-default `stationary_time` or
+`sample_rate_hz`.
+
+If `OmConvertCalibrate` and `OmConvertResample` disagree on `interpolate`,
+processing falls through to the slower injectable path.
 
 ## Calibration behaviour
 
@@ -156,6 +214,6 @@ Linux, macOS, and Windows for CPython 3.11-3.14).
 
 ## License
 
-**BSD-2-Clause** - see `LICENSE`.
+**BSD-2-Clause**. See `LICENSE`.
 
 Vendored OpenMovement omconvert sources are documented in `THIRD_PARTY_NOTICES.md`.

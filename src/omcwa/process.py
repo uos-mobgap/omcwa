@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from omcwa import _native
-from omcwa.calibrate import OmConvertCalibrate, raw_to_calibrated_identity
+from omcwa.calibrate import OmConvertCalibrate, uniform_to_calibrated_identity
 from omcwa.defaults import (
-    DEFAULT_CALIBRATE,
     DEFAULT_INTERPOLATE,
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
     USE_FILE_SAMPLE_RATE,
 )
+from omcwa.handle import CwaHandle, open_cwa
 from omcwa.resample import (
     OmConvertResample,
     calibrated_to_processed_identity_rate,
@@ -22,57 +24,130 @@ from omcwa.slice import slice_recording
 from omcwa.types import (
     CalibrateFn,
     ProcessedRecording,
-    RawRecording,
     ResampleFn,
+    UniformRecording,
     ensure_path_str,
 )
 
 _UNSET = object()
 
 
-def _is_default_calibrate(fn: OmConvertCalibrate) -> bool:
-    return (
-        fn.sample_rate_hz == USE_FILE_SAMPLE_RATE
-        and fn.interpolate == int(DEFAULT_INTERPOLATE)
-        and fn.stationary_time == DEFAULT_STATIONARY_TIME
+def _resolve_fast_interpolate(
+    calibrate_fn: OmConvertCalibrate | None,
+    resample_fn: OmConvertResample | None,
+) -> int | None:
+    """Return interpolate for one-shot path, or None for slow path."""
+    if calibrate_fn is not None and resample_fn is not None:
+        if calibrate_fn.interpolate != resample_fn.interpolate:
+            return None
+
+        return calibrate_fn.interpolate
+
+    if calibrate_fn is not None:
+        return calibrate_fn.interpolate
+
+    if resample_fn is not None:
+        return resample_fn.interpolate
+
+    return int(DEFAULT_INTERPOLATE)
+
+
+def _try_fast_path(
+    path_str: str,
+    calibrate_fn: CalibrateFn | None,
+    resample_fn: ResampleFn | None,
+) -> ProcessedRecording | None:
+    """Run the one-shot native path when backends are OmConvert or None."""
+    cal_is_omc = calibrate_fn is None or isinstance(
+        calibrate_fn, OmConvertCalibrate
+    )
+    res_is_omr = resample_fn is None or isinstance(
+        resample_fn, OmConvertResample
+    )
+    
+    if not (cal_is_omc and res_is_omr):
+        return None
+
+    omc_cal = (
+        calibrate_fn if isinstance(calibrate_fn, OmConvertCalibrate) else None
+    )
+    omc_res = (
+        resample_fn if isinstance(resample_fn, OmConvertResample) else None
+    )
+
+    interpolate = _resolve_fast_interpolate(omc_cal, omc_res)
+    if interpolate is None:
+        return None
+
+    if omc_cal is None and omc_res is None:
+        handle = open_cwa(path_str)
+        uniform = handle.materialize(interpolate=interpolate)
+        calibrated = uniform_to_calibrated_identity(uniform)
+        return calibrated_to_processed_identity_rate(calibrated)
+
+    calibrate = omc_cal is not None
+    if omc_res is not None:
+        rate = omc_res.sample_rate_hz
+    else:
+        rate = USE_FILE_SAMPLE_RATE
+
+    stationary_time = (
+        omc_cal.stationary_time
+        if omc_cal is not None
+        else DEFAULT_STATIONARY_TIME
+    )
+
+    result = _native.process(
+        path_str,
+        sample_rate_hz=rate,
+        calibrate=calibrate,
+        interpolate=int(interpolate),
+        stationary_time=stationary_time,
+    )
+
+    return processed_from_native(result)
+
+
+def _needs_materialize(
+    calibrate_fn: CalibrateFn | None,
+    resample_fn: ResampleFn | None,
+) -> bool:
+    """Return whether the slow path must materialize uniform arrays."""
+    if calibrate_fn is not None and not isinstance(
+        calibrate_fn, OmConvertCalibrate
+    ):
+        return True
+
+    if resample_fn is not None and not isinstance(
+        resample_fn, OmConvertResample
+    ):
+        return True
+
+    return False
+
+
+def _shell_uniform(handle: CwaHandle) -> UniformRecording:
+    """Build a handle-backed uniform shell without resampling arrays."""
+    metadata = handle.metadata()
+    metadata["_cwa_handle"] = handle
+
+    return UniformRecording(
+        time=np.empty(0, dtype=np.float64),
+        acc=np.empty((0, 3), dtype=np.float64),
+        gyr=None,
+        temp=None,
+        metadata=metadata,
+        path=handle.path,
     )
 
 
-def _is_default_resample(fn: OmConvertResample, sample_rate_hz: float) -> bool:
-    return fn.sample_rate_hz == sample_rate_hz and fn.interpolate == int(
-        DEFAULT_INTERPOLATE
-    )
-
-
-def load_cwa(path: str | Path) -> RawRecording:
+def load_cwa(path: str | Path) -> UniformRecording:
     """Load a CWA file at the file default sample rate.
 
-    Samples are uniformly resampled with identity calibration. Passing
-    ``sample_rate_hz=0`` to the native player selects
-    ``arrangement.defaultRate`` (omconvert convention).
+    Convenience wrapper around ``open_cwa(path).materialize()``. Samples are
+    uniformly resampled with identity calibration at the file default rate.
     """
-    path_str = ensure_path_str(path)
-    loaded = _native.LoadedCwa.load(path_str)
-    metadata = dict(loaded.metadata())
-    metadata["source_path"] = path_str
-
-    identity = _native.identity_calibration()
-    result = loaded.resample(
-        identity,
-        sample_rate_hz=USE_FILE_SAMPLE_RATE,
-        interpolate=int(DEFAULT_INTERPOLATE),
-    )
-    metadata["sample_rate_hz"] = float(result["sample_rate_hz"])
-
-    gyr = result.get("gyr")
-    return RawRecording(
-        time=result["time"],
-        acc=result["acc"],
-        gyr=None if gyr is None else gyr,
-        temp=result["temp"],
-        metadata=metadata,
-        path=path_str,
-    )
+    return open_cwa(path).materialize()
 
 
 def process_cwa(
@@ -108,44 +183,41 @@ def process_cwa(
 
     Notes
     -----
-    When both default omconvert backends are used with matching parameters,
-    processing uses a single native ``process`` call (fast path).
+    When ``calibrate_fn`` and ``resample_fn`` are ``OmConvertCalibrate``,
+    ``OmConvertResample``, or ``None``, processing uses a single native
+    ``process`` call or one materialize (fast path).
     """
     path_str = ensure_path_str(path)
 
     if calibrate_fn is _UNSET:
         calibrate_fn = OmConvertCalibrate()
+
     if resample_fn is _UNSET:
         resample_fn = OmConvertResample(sample_rate_hz=sample_rate_hz)
 
-    use_fast_path = (
-        calibrate_fn is not None
-        and resample_fn is not None
-        and isinstance(calibrate_fn, OmConvertCalibrate)
-        and isinstance(resample_fn, OmConvertResample)
-        and _is_default_calibrate(calibrate_fn)
-        and _is_default_resample(resample_fn, sample_rate_hz)
-    )
-
-    if use_fast_path:
-        result = _native.process(
-            path_str,
-            sample_rate_hz=sample_rate_hz,
-            calibrate=DEFAULT_CALIBRATE,
-            interpolate=int(DEFAULT_INTERPOLATE),
-            stationary_time=DEFAULT_STATIONARY_TIME,
-        )
-        out = processed_from_native(
-            result,
-            metadata={"source_path": path_str},
-        )
-    else:
-        raw = load_cwa(path_str)
+    out = _try_fast_path(path_str, calibrate_fn, resample_fn)
+    if out is None:
+        handle = open_cwa(path_str)
+        
+        if _needs_materialize(calibrate_fn, resample_fn):
+            uniform = handle.materialize()
+        else:
+            uniform = _shell_uniform(handle)
 
         if calibrate_fn is None:
-            calibrated = raw_to_calibrated_identity(raw)
+            calibrated = uniform_to_calibrated_identity(uniform)
+        elif isinstance(calibrate_fn, OmConvertCalibrate) and isinstance(
+            resample_fn, OmConvertResample
+        ):
+            calibrate_with_arrays = OmConvertCalibrate(
+                sample_rate_hz=calibrate_fn.sample_rate_hz,
+                interpolate=calibrate_fn.interpolate,
+                stationary_time=calibrate_fn.stationary_time,
+                apply_to_arrays=False,
+            )
+            calibrated = calibrate_with_arrays(uniform)
         else:
-            calibrated = calibrate_fn(raw)
+            calibrated = calibrate_fn(uniform)
 
         if resample_fn is None:
             out = calibrated_to_processed_identity_rate(calibrated)
@@ -154,13 +226,6 @@ def process_cwa(
 
     if time_range is not None:
         start, stop = time_range
-        sliced = slice_recording(out, start=start, stop=stop)
-        if not isinstance(sliced, ProcessedRecording):
-            msg = (
-                "slice_recording returned unexpected type "
-                "for ProcessedRecording"
-            )
-            raise TypeError(msg)
-        out = sliced
+        out = slice_recording(out, start=start, stop=stop)
 
     return out
