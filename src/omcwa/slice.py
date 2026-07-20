@@ -2,13 +2,42 @@
 
 from __future__ import annotations
 
+from typing import overload
+
 import numpy as np
 
 from omcwa.types import (
     CalibratedRecording,
     ProcessedRecording,
-    RawRecording,
+    UniformRecording,
 )
+
+
+@overload
+def slice_recording(
+    recording: UniformRecording,
+    *,
+    start: float | None = None,
+    stop: float | None = None,
+) -> UniformRecording: ...
+
+
+@overload
+def slice_recording(
+    recording: CalibratedRecording,
+    *,
+    start: float | None = None,
+    stop: float | None = None,
+) -> CalibratedRecording: ...
+
+
+@overload
+def slice_recording(
+    recording: ProcessedRecording,
+    *,
+    start: float | None = None,
+    stop: float | None = None,
+) -> ProcessedRecording: ...
 
 
 def _time_mask(
@@ -35,16 +64,16 @@ def _slice_array(
 
 
 def slice_recording(
-    recording: RawRecording | CalibratedRecording | ProcessedRecording,
+    recording: UniformRecording | CalibratedRecording | ProcessedRecording,
     *,
     start: float | None = None,
     stop: float | None = None,
-) -> RawRecording | CalibratedRecording | ProcessedRecording:
+) -> UniformRecording | CalibratedRecording | ProcessedRecording:
     """Return a recording restricted to ``start <= time < stop``."""
     mask = _time_mask(recording.time, start=start, stop=stop)
 
-    if isinstance(recording, RawRecording):
-        return RawRecording(
+    if isinstance(recording, UniformRecording):
+        return UniformRecording(
             time=recording.time[mask],
             acc=recording.acc[mask],
             gyr=_slice_array(recording.gyr, mask),
