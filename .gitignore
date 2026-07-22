@@ -21,9 +21,11 @@ _scikit_build/
 # cibuildwheel
 wheelhouse/
 
-# Accidental large fixture copies (prefer symlinks or OMCWA_FIXTURE_DIR)
-tests/fixtures/*.cwa
-tests/fixtures/*.wav
+# Accidental real-data fixture copies
+tests/fixtures/**/*.cwa
+tests/fixtures/**/*.wav
+!tests/fixtures/golden/
+!tests/fixtures/golden/*.cwa
 
 # pytest
 .pytest_cache/

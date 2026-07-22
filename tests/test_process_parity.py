@@ -1,177 +1,277 @@
-"""Parity and calibration-outcome tests against an omgui reference export.
+"""Golden-oracle tests for the fixed process_cwa pipeline.
 
-Fixture provenance
-------------------
-- ``omgui_test.cwa``: 6-channel recording (accel + gyro)
-- ``omgui_test_autocal_100res.wav``: omgui export of that file with
-  auto-calibrate enabled and resampling at 100 Hz
-
-Why a single WAV
-----------------
-On this recording the file default rate is already 100 Hz and auto-calibration
-does not converge (identity fallback). Other omgui option combinations
-(calibrate on/off × 100 Hz / auto rate) produce bitwise-identical WAV output,
-so only one reference file is kept.
-
-Known calibration behaviour
----------------------------
-Auto-calibration falls back to identity while reporting failure via
-``Calibration.success is False`` and a non-zero ``error_code`` (observed
-``-2``). Parity uses calibrate-on processing with that documented fallback.
-
-WAV decoding
-------------
-Reference WAV stores int16-quantized channels. Physical units are recovered
-from ``Scale-N`` entries in the LIST/INFO/ICMT comment:
-
-    physical = int16 * (2 * range) / 65536
-
-Channels 0-2 are accelerometer (range 8 g on this fixture). Channels 3-5 are
-gyroscope (range 2000 dps). Auxiliary channels are ignored.
-
-This scale is the Open Movement omconvert/omgui WAV contract:
-
-**References:**
-- Open Movement omconvert WAV import contract - `Scale-N` in `ICMT`, int16  ->
-    physical units:
-  `https://github.com/openmovementproject/openmovement/blob/master/Software/AX3/omconvert/README.md`
-
-- omconvert write path uses the inverse scale `65536 / (2 * range)`
-    when quantizing to int16 (`omconvert.c`) - decode recovers that inverse.
-
-Comparisons use LSB-aware tolerances on interior samples (edge transients
-trimmed). Exact float equality is inappropriate.
+Uses committed synthetic CWAs under tests/fixtures/golden/. Provenance and
+regeneration: tests/fixtures/README.md.
 """
 
 from __future__ import annotations
 
-import re
-import struct
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from omcwa import process_cwa
+from omcwa import CalibrationError, load_cwa, process_cwa
+from omcwa.defaults import InterpolateMode
 
-PARITY_SAMPLE_RATE_HZ = 100.0
-
-EDGE_TRIM = 100
-FRACTION_WITHIN_TOLERANCE = 0.999
-LSB_MULTIPLIER = 1.5
-
-
-def _decode_omgui_wav(
-    path: Path,
-) -> tuple[np.ndarray, np.ndarray, dict[int, float]]:
-    """Decode an omgui-exported WAV.
-
-    Implements the omconvert WAV import contract: read ``Scale-N``
-    from the ``ICMT``comment and recover physical units as
-    ``int16 * (2 * range) / 65536``.
-
-    See module docstring “WAV decoding” for the README / ``omconvert.c``
-    references.
-    """
-    data = path.read_bytes()
-    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
-        msg = f"not a RIFF/WAVE file: {path}"
-        raise ValueError(msg)
-
-    fmt: tuple[int, ...] | None = None
-    sample_bytes: bytes | None = None
-    comment = ""
-
-    pos = 12
-    while pos + 8 <= len(data):
-        chunk_id = data[pos : pos + 4]
-        chunk_size = struct.unpack_from("<I", data, pos + 4)[0]
-        body = data[pos + 8 : pos + 8 + chunk_size]
-
-        if chunk_id == b"fmt ":
-            fmt = struct.unpack_from("<HHIIHH", body[:16])
-        elif chunk_id == b"data":
-            sample_bytes = body
-        elif chunk_id == b"LIST" and body[:4] == b"INFO":
-            offset = 4
-            while offset + 8 <= len(body):
-                sub_id = body[offset : offset + 4]
-                sub_size = struct.unpack_from("<I", body, offset + 4)[0]
-                value = body[offset + 8 : offset + 8 + sub_size]
-
-                if sub_id == b"ICMT":
-                    comment = value.decode("utf-8", errors="replace")
-
-                offset += 8 + sub_size + (sub_size % 2)
-        pos += 8 + chunk_size + (chunk_size % 2)
-
-    if fmt is None or sample_bytes is None:
-        msg = f"missing fmt or data chunk in WAV: {path}"
-        raise ValueError(msg)
-
-    scales = {
-        int(channel): float(value)
-        for channel, value in re.findall(
-            r"Scale-(\d+):\s*([0-9.+-eE]+)", comment
-        )
-    }
-    if not scales:
-        msg = f"no Scale-N entries found in WAV comment: {path}"
-        raise ValueError(msg)
-
-    num_channels = int(fmt[1])
-    raw = np.frombuffer(sample_bytes, dtype="<i2").reshape(-1, num_channels)
-
-    acc = np.empty((raw.shape[0], 3), dtype=np.float64)
-    gyr = np.empty((raw.shape[0], 3), dtype=np.float64)
-
-    for axis in range(3):
-        acc_range = scales[axis + 1]
-        lsb = (2.0 * acc_range) / 65536.0
-        acc[:, axis] = raw[:, axis] * lsb
-
-    for axis in range(3):
-        gyr_range = scales[axis + 4]
-        lsb = (2.0 * gyr_range) / 65536.0
-        gyr[:, axis] = raw[:, axis + 3] * lsb
-
-    return acc, gyr, scales
+# LSB tolerances from omconvert WAV contract: physical = int16 * (2 * Scale-N) / 65536
+# See tests/fixtures/README.md for fixture provenance and decoding details.
+TARGET_RATE_HZ = 100.0
+ACCEL_LSB_G = 16.0 / 65536.0
+GYRO_LSB_DPS = 4000.0 / 65536.0
+CALIBRATION_TOLERANCE = 1e-4
 
 
-def test_process_cwa_matches_omgui_wav(
-    omgui_cwa: Path,
-    omgui_wav: Path,
+def _load_output_golden(path: Path) -> dict[str, np.ndarray]:
+    with np.load(path) as golden:
+        return {name: golden[name] for name in golden.files}
+
+
+def _assert_output_matches_golden(
+    actual_acc: np.ndarray,
+    actual_gyr: np.ndarray | None,
+    golden: dict[str, np.ndarray],
 ) -> None:
-    """process_cwa output matches omgui WAV within int16 LSB tolerance."""
-    out = process_cwa(omgui_cwa, sample_rate_hz=PARITY_SAMPLE_RATE_HZ)
-    ref_acc, ref_gyr, scales = _decode_omgui_wav(omgui_wav)
+    """LSB-based comparison of processed output with golden oracles."""
+    assert actual_gyr is not None
+    assert actual_acc.shape == golden["accel"].shape
+    assert actual_gyr.shape == golden["gyro"].shape
+    np.testing.assert_allclose(
+        actual_acc,
+        golden["accel"],
+        atol=ACCEL_LSB_G,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        actual_gyr,
+        golden["gyro"],
+        atol=GYRO_LSB_DPS,
+        rtol=0.0,
+    )
 
-    assert out.sample_rate_hz == pytest.approx(PARITY_SAMPLE_RATE_HZ)
+
+def test_calibrate_false_matches_resample_golden(
+    resample_only_cwa: Path,
+    golden_dir: Path,
+) -> None:
+    golden = _load_output_golden(golden_dir / "resample_only.golden.npz")
+
+    out = process_cwa(
+        resample_only_cwa,
+        sample_rate_hz=TARGET_RATE_HZ,
+        calibrate=False,
+    )
+
+    assert out.sample_rate_hz == float(golden["output_rate"])
+    assert out.acc.shape[0] == int(golden["output_samples"])
+    _assert_output_matches_golden(out.acc, out.gyr, golden)
+    assert out.calibration.success is True
+    assert out.calibration.error_code == 0
+    np.testing.assert_array_equal(out.calibration.scale, np.ones(3))
+    np.testing.assert_array_equal(out.calibration.offset, np.zeros(3))
+
+
+def test_successful_calibration_matches_reference_oracles(
+    cal_success_cwa: Path,
+    golden_dir: Path,
+) -> None:
+    calibration_golden = json.loads(
+        (golden_dir / "cal_success.golden.json").read_text(encoding="utf-8")
+    )
+    output_golden = _load_output_golden(golden_dir / "cal_success.golden.npz")
+
+    out = process_cwa(
+        cal_success_cwa,
+        sample_rate_hz=TARGET_RATE_HZ,
+    )
+
+    calibration = out.calibration
+    assert calibration.success is True
+    assert calibration.error_code == calibration_golden["error_code"] == 0
+    for field in ("scale", "offset", "temp_offset"):
+        np.testing.assert_allclose(
+            getattr(calibration, field),
+            calibration_golden[field],
+            atol=CALIBRATION_TOLERANCE,
+            rtol=0.0,
+        )
+    assert calibration.ref_temp == pytest.approx(
+        calibration_golden["reference_temperature"],
+        abs=CALIBRATION_TOLERANCE,
+    )
+    _assert_output_matches_golden(out.acc, out.gyr, output_golden)
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "error_code"),
+    [
+        ("cal_failure.cwa", -1),
+        ("cal_failure_no_axis.cwa", -2),
+    ],
+)
+def test_calibration_failures_raise_by_default(
+    golden_dir: Path,
+    fixture_name: str,
+    error_code: int,
+) -> None:
+    with pytest.raises(
+        CalibrationError,
+        match=rf"error code {error_code}",
+    ) as error:
+        process_cwa(
+            golden_dir / fixture_name,
+            sample_rate_hz=TARGET_RATE_HZ,
+        )
+
+    assert error.value.error_code == error_code
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "error_code"),
+    [
+        ("cal_failure.cwa", -1),
+        ("cal_failure_no_axis.cwa", -2),
+    ],
+)
+def test_explicit_identity_fallback_preserves_failure(
+    golden_dir: Path,
+    fixture_name: str,
+    error_code: int,
+) -> None:
+    path = golden_dir / fixture_name
+    fallback = process_cwa(
+        path,
+        sample_rate_hz=TARGET_RATE_HZ,
+        on_calibration_failure="identity",
+    )
+    uncalibrated = process_cwa(
+        path,
+        sample_rate_hz=TARGET_RATE_HZ,
+        calibrate=False,
+    )
+
+    assert fallback.calibration.success is False
+    assert fallback.calibration.error_code == error_code
+    np.testing.assert_array_equal(fallback.calibration.scale, np.ones(3))
+    np.testing.assert_array_equal(fallback.calibration.offset, np.zeros(3))
+    np.testing.assert_allclose(fallback.acc, uncalibrated.acc, rtol=0.0)
+    np.testing.assert_allclose(fallback.gyr, uncalibrated.gyr, rtol=0.0)
+
+
+def test_invalid_calibration_failure_policy_is_rejected() -> None:
+    with pytest.raises(
+        ValueError,
+        match="on_calibration_failure must be",
+    ):
+        process_cwa(
+            "not-opened.cwa",
+            on_calibration_failure="continue",  # type: ignore[arg-type]
+        )
+
+
+def test_file_rate_cubic_defaults_match_explicit_options(
+    resample_only_cwa: Path,
+) -> None:
+    default = process_cwa(resample_only_cwa, calibrate=False)
+    explicit = process_cwa(
+        resample_only_cwa,
+        sample_rate_hz=TARGET_RATE_HZ,
+        calibrate=False,
+        interpolate=InterpolateMode.CUBIC,
+    )
+
+    assert default.sample_rate_hz == TARGET_RATE_HZ
+    np.testing.assert_array_equal(default.time, explicit.time)
+    np.testing.assert_array_equal(default.acc, explicit.acc)
+    np.testing.assert_array_equal(default.gyr, explicit.gyr)
+
+
+def test_explicit_rate_and_interpolation_shape_output(
+    resample_only_cwa: Path,
+) -> None:
+    out = process_cwa(
+        resample_only_cwa,
+        sample_rate_hz=50.0,
+        calibrate=False,
+        interpolate=InterpolateMode.LINEAR,
+    )
+
+    assert out.sample_rate_hz == 50.0
+    assert out.acc.shape == (250, 3)
     assert out.gyr is not None
-    assert out.acc.shape == ref_acc.shape
-    assert out.gyr.shape == ref_gyr.shape
-
-    acc_diff = out.acc[EDGE_TRIM:-EDGE_TRIM] - ref_acc[EDGE_TRIM:-EDGE_TRIM]
-    gyr_diff = out.gyr[EDGE_TRIM:-EDGE_TRIM] - ref_gyr[EDGE_TRIM:-EDGE_TRIM]
-
-    lsb_acc = (2.0 * scales[1]) / 65536.0
-    lsb_gyr = (2.0 * scales[4]) / 65536.0
-
-    acc_fraction = float(
-        np.mean(np.max(np.abs(acc_diff), axis=1) <= (LSB_MULTIPLIER * lsb_acc))
-    )
-    gyr_fraction = float(
-        np.mean(np.max(np.abs(gyr_diff), axis=1) <= (LSB_MULTIPLIER * lsb_gyr))
+    assert out.gyr.shape == (250, 3)
+    np.testing.assert_allclose(
+        np.diff(out.time),
+        1.0 / 50.0,
+        atol=3e-7,
+        rtol=0.0,
     )
 
-    assert acc_fraction >= FRACTION_WITHIN_TOLERANCE
-    assert gyr_fraction >= FRACTION_WITHIN_TOLERANCE
+
+def test_output_types_units_flags_and_public_metadata(
+    resample_only_cwa: Path,
+) -> None:
+    out = process_cwa(resample_only_cwa, calibrate=False)
+
+    assert out.time.dtype == np.float64
+    assert out.acc.dtype == np.float64
+    assert out.gyr is not None
+    assert out.gyr.dtype == np.float64
+    assert out.acc.shape == out.gyr.shape == (500, 3)
+    assert np.max(np.abs(out.acc)) < 2.0
+    assert np.max(np.abs(out.gyr)) < 25.0
+    assert out.valid.dtype == np.bool_
+    assert out.valid.shape == (500,)
+    assert np.all(out.valid)
+    assert out.clipped.dtype == np.bool_
+    assert out.clipped.shape == (500,)
+    assert not np.any(out.clipped)
+
+    assert out.metadata["device_id"] == 0
+    assert out.metadata["session_id"] == 0
+    assert out.metadata["default_rate"] == TARGET_RATE_HZ
+    assert out.metadata["sample_rate_hz"] == TARGET_RATE_HZ
+    assert out.metadata["has_accel"] is True
+    assert out.metadata["has_gyro"] is True
+    assert out.metadata["start_time"] == pytest.approx(out.time[0])
+    assert all(not key.startswith("_") for key in out.metadata)
 
 
-def test_auto_calibration_reports_fallback(omgui_cwa: Path) -> None:
-    """Auto-calibration failure is observable on the omgui test fixture."""
-    out = process_cwa(omgui_cwa, sample_rate_hz=PARITY_SAMPLE_RATE_HZ)
+def test_load_cwa_preserves_temperature_and_path(
+    resample_only_cwa: Path,
+) -> None:
+    uniform = load_cwa(resample_only_cwa)
 
-    assert out.calibration is not None
-    assert out.calibration.success is False
-    assert out.calibration.error_code != 0
+    assert uniform.path == str(resample_only_cwa)
+    assert uniform.acc.shape == (500, 3)
+    assert uniform.gyr is not None
+    assert uniform.gyr.shape == (500, 3)
+    assert uniform.temp.shape == (500,)
+    assert uniform.temp.dtype == np.float64
+    assert uniform.metadata["sample_rate_hz"] == TARGET_RATE_HZ
+    assert all(not key.startswith("_") for key in uniform.metadata)
+
+
+def test_time_range_is_half_open_post_processing_trim(
+    cal_success_cwa: Path,
+) -> None:
+    full = process_cwa(cal_success_cwa)
+    start = float(full.time[125])
+    stop = float(full.time[375])
+    mask = (full.time >= start) & (full.time < stop)
+
+    window = process_cwa(
+        cal_success_cwa,
+        time_range=(start, stop),
+    )
+
+    np.testing.assert_array_equal(window.time, full.time[mask])
+    np.testing.assert_array_equal(window.acc, full.acc[mask])
+    np.testing.assert_array_equal(window.gyr, full.gyr[mask])
+    np.testing.assert_array_equal(window.valid, full.valid[mask])
+    np.testing.assert_array_equal(window.clipped, full.clipped[mask])
+    np.testing.assert_array_equal(
+        window.calibration.offset,
+        full.calibration.offset,
+    )

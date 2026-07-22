@@ -1,0 +1,22 @@
+{
+  "error_code": 0,
+  "scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "offset": [
+    0.0824786077,
+    0.0824786268,
+    0.0824786217
+  ],
+  "temp_offset": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "reference_temperature": -20.5,
+  "stationary_count": 7,
+  "svm_error_pre": 0.0002202286,
+  "svm_error_post": 0.0905071243
+}
