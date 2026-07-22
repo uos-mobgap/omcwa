@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -61,22 +60,9 @@ class UniformRecording:
     time: npt.NDArray[np.float64]
     acc: npt.NDArray[np.float64]
     gyr: npt.NDArray[np.float64] | None
-    temp: npt.NDArray[np.float64] | None
+    temp: npt.NDArray[np.float64]
     metadata: dict[str, Any]
-    path: str | None = None
-
-
-@dataclass
-class CalibratedRecording:
-    """Recording after accelerometer calibration."""
-
-    time: npt.NDArray[np.float64]
-    acc: npt.NDArray[np.float64]
-    gyr: npt.NDArray[np.float64] | None
-    temp: npt.NDArray[np.float64] | None
-    calibration: Calibration
-    metadata: dict[str, Any]
-    path: str | None = None
+    path: str
 
 
 @dataclass
@@ -90,26 +76,10 @@ class ProcessedRecording:
     time: npt.NDArray[np.float64]
     acc: npt.NDArray[np.float64]
     gyr: npt.NDArray[np.float64] | None
-    calibration: Calibration | None
+    calibration: Calibration
     metadata: dict[str, Any]
-    valid: npt.NDArray[np.bool_] | None = None
-    clipped: npt.NDArray[np.bool_] | None = None
-
-
-# pipeline hook: uniform pre-cal samples -> calibrated recording.
-CalibrateFn: TypeAlias = Callable[[UniformRecording], CalibratedRecording]
-
-# pipeline hook: calibrated recording -> uniformly resampled output.
-ResampleFn: TypeAlias = Callable[[CalibratedRecording], ProcessedRecording]
-
-
-def source_path(recording: UniformRecording | CalibratedRecording) -> str:
-    """Return the on-disk CWA path required by native omconvert backends."""
-    if recording.path:
-        return str(recording.path)
-
-    msg = "Recording has no path. Cannot run native omconvert backend."
-    raise ValueError(msg)
+    valid: npt.NDArray[np.bool_]
+    clipped: npt.NDArray[np.bool_]
 
 
 def ensure_path_str(path: str | Path) -> str:

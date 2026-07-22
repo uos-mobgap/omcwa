@@ -14,15 +14,8 @@ Settings are in `pyproject.toml` under `[tool.ruff]`.
 
 **Conventions**
 
-- Public functions and classes need [NumPy-style](https://numpydoc.readthedocs.io/en/latest/format.html) docstrings.
+- Public functions and classes need short, formal docstrings.
 - Public APIs need type hints.
-- Prefer `->` arrows in docstrings and comments. Do not use em-dashes or semicolons in comments or docstrings.
-
-**Tests**
-
-Add tests only when they guard real behaviour. Each new or changed test function
-needs a short justification docstring (see `tests/test_process_parity.py`).
-Avoid coverage theatre and combinatorial matrices of option pairs.
 
 **Defaults**
 

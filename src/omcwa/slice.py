@@ -6,11 +6,7 @@ from typing import overload
 
 import numpy as np
 
-from omcwa.types import (
-    CalibratedRecording,
-    ProcessedRecording,
-    UniformRecording,
-)
+from omcwa.types import ProcessedRecording, UniformRecording
 
 
 @overload
@@ -20,15 +16,6 @@ def slice_recording(
     start: float | None = None,
     stop: float | None = None,
 ) -> UniformRecording: ...
-
-
-@overload
-def slice_recording(
-    recording: CalibratedRecording,
-    *,
-    start: float | None = None,
-    stop: float | None = None,
-) -> CalibratedRecording: ...
 
 
 @overload
@@ -64,11 +51,11 @@ def _slice_array(
 
 
 def slice_recording(
-    recording: UniformRecording | CalibratedRecording | ProcessedRecording,
+    recording: UniformRecording | ProcessedRecording,
     *,
     start: float | None = None,
     stop: float | None = None,
-) -> UniformRecording | CalibratedRecording | ProcessedRecording:
+) -> UniformRecording | ProcessedRecording:
     """Return a recording restricted to ``start <= time < stop``."""
     mask = _time_mask(recording.time, start=start, stop=stop)
 
@@ -78,17 +65,6 @@ def slice_recording(
             acc=recording.acc[mask],
             gyr=_slice_array(recording.gyr, mask),
             temp=_slice_array(recording.temp, mask),
-            metadata=dict(recording.metadata),
-            path=recording.path,
-        )
-
-    if isinstance(recording, CalibratedRecording):
-        return CalibratedRecording(
-            time=recording.time[mask],
-            acc=recording.acc[mask],
-            gyr=_slice_array(recording.gyr, mask),
-            temp=_slice_array(recording.temp, mask),
-            calibration=recording.calibration,
             metadata=dict(recording.metadata),
             path=recording.path,
         )

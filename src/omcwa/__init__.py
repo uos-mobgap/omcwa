@@ -2,7 +2,6 @@
 
 __version__ = "0.1.0"
 
-from omcwa.calibrate import OmConvertCalibrate
 from omcwa.defaults import (
     DEFAULT_CALIBRATE,
     DEFAULT_INTERPOLATE,
@@ -11,15 +10,10 @@ from omcwa.defaults import (
     USE_FILE_SAMPLE_RATE,
     InterpolateMode,
 )
-from omcwa.handle import CwaHandle, open_cwa
-from omcwa.process import load_cwa, process_cwa
-from omcwa.resample import OmConvertResample
+from omcwa.process import CalibrationError, load_cwa, process_cwa
 from omcwa.types import (
-    CalibratedRecording,
-    CalibrateFn,
     Calibration,
     ProcessedRecording,
-    ResampleFn,
     UniformRecording,
 )
 
@@ -27,15 +21,9 @@ __all__ = [
     "__version__",
     "load_cwa",
     "process_cwa",
-    "open_cwa",
-    "CwaHandle",
-    "OmConvertCalibrate",
-    "OmConvertResample",
-    "CalibrateFn",
-    "ResampleFn",
+    "CalibrationError",
     "Calibration",
     "UniformRecording",
-    "CalibratedRecording",
     "ProcessedRecording",
     "InterpolateMode",
     "DEFAULT_SAMPLE_RATE_HZ",
