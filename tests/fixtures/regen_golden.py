@@ -23,7 +23,7 @@ from fixtures_csv import (
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 TARGET_RATE_HZ = 100
-INTERPOLATE_MODE = 3
+INTERPOLATE_MODE = 3  # InterpolateMode.CUBIC
 EXPECTED_CALIBRATION_RESULTS = {
     "cal_success": 0,
     "cal_failure": -1,
@@ -32,6 +32,7 @@ EXPECTED_CALIBRATION_RESULTS = {
 
 
 def _resolve_binary(value: Path | None, name: str) -> Path:
+    """Resolve an executable from a CLI path or ``PATH``."""
     candidate = value
     if candidate is None:
         located = shutil.which(name)
@@ -49,6 +50,7 @@ def _resolve_binary(value: Path | None, name: str) -> Path:
 
 
 def _run_omsynth(binary: Path, csv_path: Path, cwa_path: Path) -> None:
+    """Run omsynth to synthesise a CWA from a CSV input."""
     subprocess.run(
         [
             binary,
@@ -72,6 +74,7 @@ def _run_omconvert(
     *,
     calibrate: bool,
 ) -> None:
+    """Run omconvert to write WAV output and an ``-info`` sidecar."""
     subprocess.run(
         [
             binary,
@@ -92,6 +95,7 @@ def _run_omconvert(
 
 
 def _parse_info(path: Path) -> dict[str, str]:
+    """Parse omconvert ``-info`` key/value lines into a flat mapping."""
     info: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -106,6 +110,7 @@ def _parse_info(path: Path) -> dict[str, str]:
 
 
 def _calibration_oracle(info: dict[str, str]) -> dict[str, Any]:
+    """Extract calibration coefficients from omconvert info output."""
     values = [float(value) for value in info["Calibration"].split(",")]
     if len(values) != 10:
         raise ValueError(
@@ -128,6 +133,10 @@ def _calibration_oracle(info: dict[str, str]) -> dict[str, Any]:
 
 
 def _decode_wav(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
+    """Decode omconvert WAV into physical accel, gyro, and sample rate.
+
+    Minimal reimplementation of the omconvert WAV import contract.
+    """
     data = path.read_bytes()
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError(f"not a RIFF/WAVE file: {path}")
@@ -135,12 +144,14 @@ def _decode_wav(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
     fmt: tuple[int, ...] | None = None
     sample_bytes: bytes | None = None
     comment = ""
+    # Walk RIFF chunks. Pad odd-sized bodies to the next word boundary.
+    # ref: native/vendored/omconvert/wav.c
     position = 12
     while position + 8 <= len(data):
         chunk_id = data[position : position + 4]
         chunk_size = struct.unpack_from("<I", data, position + 4)[0]
         body = data[position + 8 : position + 8 + chunk_size]
-        
+
         if chunk_id == b"fmt ":
             fmt = struct.unpack_from("<HHIIHH", body[:16])
         elif chunk_id == b"data":
@@ -151,8 +162,9 @@ def _decode_wav(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
                 sub_id = body[offset : offset + 4]
                 sub_size = struct.unpack_from("<I", body, offset + 4)[0]
                 value = body[offset + 8 : offset + 8 + sub_size]
-                
+
                 if sub_id == b"ICMT":
+                    # ref: native/vendored/omconvert/README.md
                     comment = value.decode("utf-8", errors="replace")
 
                 offset += 8 + sub_size + (sub_size % 2)
@@ -160,13 +172,17 @@ def _decode_wav(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
 
     if fmt is None or sample_bytes is None:
         raise ValueError(f"missing fmt or data chunk in WAV: {path}")
-    
+
+    # fmt: (audio_format, channels, sample_rate, ..., bits_per_sample)
     if fmt[0] not in {1, 0xFFFE} or fmt[5] != 16 or fmt[1] < 6:
         raise ValueError(
             "expected PCM16 or extensible PCM16 WAV with at least six "
             "sensor channels"
         )
 
+    # Parse Scale-N from the ICMT comment.
+    # ref: native/vendored/omconvert/README.md ("Importing the WAV file")
+    # ref: native/vendored/omconvert/omconvert.c (Scale-N write/read)
     scales = {
         int(channel): float(value)
         for channel, value in re.findall(
@@ -181,6 +197,8 @@ def _decode_wav(path: Path) -> tuple[np.ndarray, np.ndarray, float]:
     raw = np.frombuffer(sample_bytes, dtype="<i2").reshape(-1, fmt[1])
     physical = np.empty((raw.shape[0], 6), dtype=np.float64)
     for axis in range(6):
+        # physical = int16 * (2 * Scale-N) / 65536
+        # ref: native/vendored/omconvert/omdata.c
         lsb = (2.0 * scales[axis + 1]) / 65536.0
         physical[:, axis] = raw[:, axis] * lsb
 
@@ -193,6 +211,7 @@ def _write_output_oracle(
     *,
     compressed: bool,
 ) -> None:
+    """Write accel/gyro NPZ golden oracles decoded from omconvert WAV output."""
     accel, gyro, output_rate = _decode_wav(wav_path)
     save = np.savez_compressed if compressed else np.savez
     save(
@@ -221,6 +240,7 @@ def regenerate(omsynth: Path, omconvert: Path, golden_dir: Path) -> None:
             if fixture_sample_rate_hz(name) != TARGET_RATE_HZ:
                 raise ValueError(f"unexpected sample rate for {name}")
             _run_omsynth(omsynth, csv_path, cwa_path)
+            # resample_only exercises identity calibration (calibrate=False).
             calibrate = name != "resample_only"
             _run_omconvert(
                 omconvert,
@@ -247,7 +267,7 @@ def regenerate(omsynth: Path, omconvert: Path, golden_dir: Path) -> None:
                 _write_output_oracle(
                     wav_path,
                     oracle,
-                    compressed=False,
+                    compressed=False,  # matches np.load usage in parity tests
                 )
                 artifacts.append(oracle)
             elif name == "cal_success":
@@ -270,6 +290,7 @@ def regenerate(omsynth: Path, omconvert: Path, golden_dir: Path) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and regenerate committed golden artifacts."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--omsynth",
