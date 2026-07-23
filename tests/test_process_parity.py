@@ -15,8 +15,9 @@ import pytest
 from omcwa import CalibrationError, load_cwa, process_cwa
 from omcwa.defaults import InterpolateMode
 
-# LSB tolerances from omconvert WAV contract: physical = int16 * (2 * Scale-N) / 65536
-# See tests/fixtures/README.md for fixture provenance and decoding details.
+# LSB tolerances from omconvert WAV contract:
+# physical = int16 * (2 * Scale-N) / 65536
+# ref: native/vendored/omconvert/omdata.c
 TARGET_RATE_HZ = 100.0
 ACCEL_LSB_G = 16.0 / 65536.0
 GYRO_LSB_DPS = 4000.0 / 65536.0

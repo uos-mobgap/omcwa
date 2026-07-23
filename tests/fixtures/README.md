@@ -14,7 +14,10 @@ The fixtures exercise four outcomes:
 
 The NPZ files contain physical-unit accel and gyro arrays decoded from the
 reference WAV output. WAV `int16` values are converted with the omconvert
-contract `physical = int16 * (2 * Scale-N) / 65536`. The JSON file contains
+contract `physical = int16 * (2 * Scale-N) / 65536` (see
+`native/vendored/omconvert/README.md`, "Importing the WAV file", and
+`native/vendored/omconvert/omdata.c`). Decoding is implemented in
+`tests/fixtures/regen_golden.py` (`_decode_wav`). The JSON file contains
 the calibration coefficients reported by `omconvert -info`.
 
 ## Regeneration
@@ -31,5 +34,4 @@ uv run python tests/fixtures/regen_golden.py \
 
 The script recreates all artifacts in a temporary directory, verifies the  
 expected calibration result codes, and replaces `golden/` only after every  
-command succeeds. It depends on NumPy but not on the `openmovement` Python  
-package.
+command succeeds.

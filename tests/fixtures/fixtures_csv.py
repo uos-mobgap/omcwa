@@ -21,6 +21,7 @@ class FixtureSpec:
 
 
 def _timestamp(sample_index: int, sample_rate_hz: int) -> str:
+    """Format a sample index as an omsynth CSV timestamp."""
     total_ms = round(sample_index * 1000 / sample_rate_hz)
     seconds, milliseconds = divmod(total_ms, 1000)
     minutes, seconds = divmod(seconds, 60)
@@ -31,6 +32,7 @@ def _timestamp(sample_index: int, sample_rate_hz: int) -> str:
 
 
 def _resample_only(spec: FixtureSpec) -> list[str]:
+    """Build sinusoidal accel and gyro rows for the resample-only fixture."""
     rows = [CSV_HEADER]
     for index in range(int(spec.duration_s * spec.sample_rate_hz)):
         time_s = index / spec.sample_rate_hz
@@ -48,6 +50,8 @@ def _resample_only(spec: FixtureSpec) -> list[str]:
 
 
 def _cal_success(spec: FixtureSpec) -> list[str]:
+    """Build stationary-orientation rows for a successful calibration fit."""
+    # Eight 10-second windows, each held at a distinct gravity vector.
     orientations: Sequence[tuple[float, float, float]] = (
         (1.0, 0.0, 0.0),
         (-1.0, 0.0, 0.0),
@@ -73,6 +77,7 @@ def _cal_success(spec: FixtureSpec) -> list[str]:
 
 
 def _cal_failure(spec: FixtureSpec) -> list[str]:
+    """Build near-stationary rows with too little axis diversity."""
     rows = [CSV_HEADER]
     for index in range(int(spec.duration_s * spec.sample_rate_hz)):
         time_s = index / spec.sample_rate_hz
@@ -91,6 +96,7 @@ _GENERATORS: dict[
     "resample_only": (_resample_only, FixtureSpec(5.0, 100)),
     "cal_success": (_cal_success, FixtureSpec(80.0, 100)),
     "cal_failure": (_cal_failure, FixtureSpec(30.0, 100)),
+    # Same generator as cal_failure. Longer duration yields error -2.
     "cal_failure_no_axis": (_cal_failure, FixtureSpec(50.0, 100)),
 }
 

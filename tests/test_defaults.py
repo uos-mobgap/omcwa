@@ -66,6 +66,7 @@ def _calibration(error_code: int = 0) -> SimpleNamespace:
 
 class _FakeLoaded:
     """Stub LoadedCwa that records native API calls"""
+
     def __init__(self, calls: dict[str, list[Any]], error_code: int = 0):
         self.calls = calls
         self.error_code = error_code
