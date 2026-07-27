@@ -13,13 +13,18 @@ dependencies = [
     "numpy>=1.25",
 ]
 
+[project.urls]
+Homepage = "https://github.com/uos-mobgap/omcwa"
+Repository = "https://github.com/uos-mobgap/omcwa"
+Issues = "https://github.com/uos-mobgap/omcwa/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
     "ruff>=0.15.21",
 ]
 showcase = [
-    "ipykernel>=6.25",
+    "ipykernel>=6.25,<7",
     "jupyter>=1.1",
     "jupytext>=1.19",
 ]
@@ -30,7 +35,7 @@ dev = [
     "ruff>=0.15.21",
 ]
 showcase = [
-    "ipykernel>=6.25",
+    "ipykernel>=6.25,<7",
     "jupyter>=1.1",
     "jupytext>=1.19",
 ]

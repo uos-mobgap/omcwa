@@ -9,20 +9,22 @@ vendored OpenMovement C implementation directly through pybind11.
 
 ## Install
 
-Published wheels, once available:
-
-```bash
-pip install omcwa
-# or
-uv add omcwa
-```
+Recommended: [uv](https://docs.astral.sh/uv/)
 
 From a checkout:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/uos-mobgap/omcwa.git
 cd omcwa
 uv sync
+```
+
+Published wheels, once available (TODO):
+
+```bash
+uv add omcwa
+# or
+pip install omcwa
 ```
 
 Editable builds require Python 3.11-3.14 and a C++17 toolchain.
