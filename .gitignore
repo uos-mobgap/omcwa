@@ -18,6 +18,13 @@ cmake-build-*/
 _scikit_build/
 *.cmake
 
+# Native cache
+.cache/
+
+# scripts/profiling/build_native_benches.sh output
+build-bench/
+scripts/profiling/
+
 # cibuildwheel
 wheelhouse/
 
