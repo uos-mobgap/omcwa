@@ -156,11 +156,26 @@ Run the development gates with:
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests benchmarks
+uv run ruff format --check src tests benchmarks
 ./scripts/check_cpp_format.sh
 uv run pytest -q
 ```
+
+## Benchmarks
+
+Runtime is measured with `pytest-benchmark` and peak memory is measured
+alongside it, both against synthetic CWA recordings that are generated on
+demand.
+
+```bash
+uv sync --group bench
+uv run pytest benchmarks --cwa-hours 10
+```
+
+The suite is not part of the default `pytest` run. See
+[benchmarks/README.md](benchmarks/README.md) for the options, for how to
+compare two branches, and for how the generated recording is built.
 
 The showcase notebook uses the committed `cal_success.cwa` fixture:
 
