@@ -247,7 +247,14 @@ class LoadedCwa {
         QuietNativeIo quiet;
         LoadedCwa loaded;
         std::memset(&loaded.data_, 0, sizeof(loaded.data_));
-        if (!OmDataLoad(&loaded.data_, path.c_str())) {
+        bool ok = false;
+        {
+            // OmDataLoad touches no Python state and runs for tens of seconds
+            // on large files. Release the GIL so other threads keep running.
+            py::gil_scoped_release unlock;
+            ok = OmDataLoad(&loaded.data_, path.c_str()) != 0;
+        }
+        if (!ok) {
             throw std::runtime_error("failed to load CWA file: " + path);
         }
         loaded.loaded_ = true;
@@ -374,27 +381,36 @@ class LoadedCwa {
         OmCalibrateInit(&native);
 
         omcalibrate_stationary_points_t* stationary_points = nullptr;
+        int calibration_result = 0;
 
-        if (prefer_calibrate_from_data(data_)) {
-            stationary_points = OmCalibrateFindStationaryPointsFromData(
-                &config, const_cast<omdata_t*>(&data_));
-        } else {
-            om_convert_player_t player = {};
-            // sample_rate_hz <= 0 uses arrangement.defaultRate inside
-            // OmConvertPlayerInitialize.
-            // ref: vendored/omconvert/omconvert.c:OmConvertPlayerInitialize:747
-            OmConvertPlayerInitialize(&player, &arrangement, sample_rate_hz,
-                                      static_cast<char>(interpolate));
-            stationary_points =
-                OmCalibrateFindStationaryPointsFromPlayer(&config, &player);
+        {
+            // Whole-recording scan plus regression fit, all in C.
+            py::gil_scoped_release unlock;
+
+            if (prefer_calibrate_from_data(data_)) {
+                stationary_points = OmCalibrateFindStationaryPointsFromData(
+                    &config, const_cast<omdata_t*>(&data_));
+            } else {
+                om_convert_player_t player = {};
+                // sample_rate_hz <= 0 uses arrangement.defaultRate inside
+                // OmConvertPlayerInitialize.
+                // ref:
+                // vendored/omconvert/omconvert.c:OmConvertPlayerInitialize:747
+                OmConvertPlayerInitialize(&player, &arrangement, sample_rate_hz,
+                                          static_cast<char>(interpolate));
+                stationary_points =
+                    OmCalibrateFindStationaryPointsFromPlayer(&config, &player);
+            }
+
+            if (stationary_points != nullptr) {
+                calibration_result = OmCalibrateFindAutoCalibration(
+                    &config, stationary_points, &native);
+            }
         }
 
         if (stationary_points == nullptr) {
             throw std::runtime_error("failed to find stationary points");
         }
-
-        const int calibration_result =
-            OmCalibrateFindAutoCalibration(&config, stationary_points, &native);
         // On auto-calibration failure, omconvert resets to identity calibration
         // but preserves errorCode and numAxes. OmCalibrateInit here matches
         // OmCalibrateCopy with a null defaultCalibration.
