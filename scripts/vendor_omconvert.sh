@@ -54,4 +54,22 @@ EOF
 # remove legacy pin file if a previous vendor run created it
 rm -f "${dest_dir}/VERSION"
 
+# re-apply local performance patches (see native/patches/README.md)
+patch_dir="${root_dir}/native/patches"
+shopt -s nullglob
+patches=("${patch_dir}"/*.patch)
+shopt -u nullglob
+for patch in "${patches[@]}"; do
+    echo "applying $(basename "${patch}")"
+    if ! git -C "${root_dir}" apply "${patch}"; then
+        echo "ERROR: ${patch} did not apply cleanly." >&2
+        echo "Resolve it against the new upstream source and regenerate it;" >&2
+        echo "see native/patches/README.md." >&2
+        exit 1
+    fi
+done
+
 echo "vendored omconvert at ${commit} into ${dest_dir}"
+if [[ ${#patches[@]} -gt 0 ]]; then
+    echo "re-applied ${#patches[@]} local patch(es) from ${patch_dir}"
+fi
