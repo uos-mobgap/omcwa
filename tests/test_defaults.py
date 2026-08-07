@@ -173,6 +173,8 @@ def test_process_forwards_defaults_and_loads_once(
     assert resample_options == {
         "sample_rate_hz": DEFAULT_SAMPLE_RATE_HZ,
         "interpolate": int(DEFAULT_INTERPOLATE),
+        # ProcessedRecording drops temperature, so it is never allocated.
+        "with_temp": False,
     }
     assert calls["identity"] == []
     assert out.sample_rate_hz == 100.0
@@ -205,6 +207,7 @@ def test_process_forwards_explicit_primitive_options(
     assert options == {
         "sample_rate_hz": 50.0,
         "interpolate": int(InterpolateMode.LINEAR),
+        "with_temp": False,
     }
     assert out.sample_rate_hz == 50.0
     assert out.calibration.success is True

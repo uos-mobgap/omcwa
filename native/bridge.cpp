@@ -473,7 +473,8 @@ class LoadedCwa {
     py::dict
     resample(const Calibration& calibration,
              double sample_rate_hz = omcwa_defaults::kUseFileSampleRate,
-             int interpolate = omcwa_defaults::kDefaultInterpolate) const {
+             int interpolate = omcwa_defaults::kDefaultInterpolate,
+             bool with_temp = true) const {
         QuietNativeIo quiet;
         omdata_session_t* session =
             first_session(const_cast<omdata_t*>(&data_));
@@ -500,11 +501,19 @@ class LoadedCwa {
         const int num_gyro = static_cast<int>(channel_map.gyro.size());
         const auto native_cal = calibration.to_native();
 
+        // Output arrays are sized by num_samples and dominate peak memory
+        // (66 bytes/sample with gyro). temp is 8 of those bytes and is only
+        // materialised when the caller wants it: process_cwa() drops it,
+        // load_cwa() keeps it.
         py::array_t<double> time_arr(num_samples);
         py::array_t<double> acc_arr = make_2d_array(num_samples, 3);
-        py::array_t<double> temp_arr(num_samples);
         py::array_t<bool> valid_arr(num_samples);
         py::array_t<bool> clipped_arr(num_samples);
+
+        py::array_t<double> temp_arr;
+        if (with_temp) {
+            temp_arr = py::array_t<double>(num_samples);
+        }
 
         const bool has_gyro = num_gyro > 0;
         py::array_t<double> gyr_arr;
@@ -512,59 +521,73 @@ class LoadedCwa {
             gyr_arr = make_2d_array(num_samples, 3);
         }
 
-        auto time_mut = time_arr.mutable_unchecked<1>();
-        auto acc_mut = acc_arr.mutable_unchecked<2>();
-        auto temp_mut = temp_arr.mutable_unchecked<1>();
-        auto valid_mut = valid_arr.mutable_unchecked<1>();
-        auto clipped_mut = clipped_arr.mutable_unchecked<1>();
+        // Raw pointers so the sample loop touches no Python state and can run
+        // with the GIL released.
+        double* time_out = time_arr.mutable_data();
+        double* acc_out = acc_arr.mutable_data();
+        bool* valid_out = valid_arr.mutable_data();
+        bool* clipped_out = clipped_arr.mutable_data();
+        double* temp_out = with_temp ? temp_arr.mutable_data() : nullptr;
+        double* gyr_out = has_gyro ? gyr_arr.mutable_data() : nullptr;
 
-        for (int sample = 0; sample < num_samples; ++sample) {
-            OmConvertPlayerSeek(&player, sample);
+        {
+            py::gil_scoped_release unlock;
 
-            const double t =
-                arrangement.startTime + static_cast<double>(sample) / rate;
-            time_mut(sample) = t;
-            temp_mut(sample) = player.temp;
-            valid_mut(sample) = player.valid != 0;
+            for (int sample = 0; sample < num_samples; ++sample) {
+                OmConvertPlayerSeek(&player, sample);
 
-            const bool clipped = player.clipped;
-            // Accel: scale raw counts to g, then apply calibration on the first
-            // three accel axes.
-            // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
-            for (int j = 0; j < num_accel && j < 3; ++j) {
-                const int c = channel_map.accel[static_cast<size_t>(j)];
-                double v = player.values[c] * player.scale[c];
-                if (j < OMCALIBRATE_AXES) {
-                    v = apply_accel_calibration(v, j, player.temp, native_cal);
+                const double t =
+                    arrangement.startTime + static_cast<double>(sample) / rate;
+                time_out[sample] = t;
+                valid_out[sample] = player.valid != 0;
+                clipped_out[sample] = player.clipped;
+                if (temp_out != nullptr) {
+                    temp_out[sample] = player.temp;
                 }
-                acc_mut(sample, j) = v;
-            }
-            for (int j = num_accel; j < 3; ++j) {
-                acc_mut(sample, j) = 0.0;
-            }
 
-            if (has_gyro) {
-                auto gyr_mut = gyr_arr.mutable_unchecked<2>();
-                // Gyro: scale raw counts only. omconvert calibrates only when
-                // channel index c < OMCALIBRATE_AXES (accel under default
-                // priority).
-                // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
-                for (int j = 0; j < num_gyro && j < 3; ++j) {
-                    const int c = channel_map.gyro[static_cast<size_t>(j)];
-                    gyr_mut(sample, j) = player.values[c] * player.scale[c];
+                // Accel: scale raw counts to g, then apply calibration on the
+                // first three accel axes.
+                // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
+                double* acc_row = acc_out + static_cast<size_t>(sample) * 3;
+                for (int j = 0; j < num_accel && j < 3; ++j) {
+                    const int c = channel_map.accel[static_cast<size_t>(j)];
+                    double v = player.values[c] * player.scale[c];
+                    if (j < OMCALIBRATE_AXES) {
+                        v = apply_accel_calibration(v, j, player.temp,
+                                                    native_cal);
+                    }
+                    acc_row[j] = v;
                 }
-                for (int j = num_gyro; j < 3; ++j) {
-                    gyr_mut(sample, j) = 0.0;
+                for (int j = num_accel; j < 3; ++j) {
+                    acc_row[j] = 0.0;
+                }
+
+                if (gyr_out != nullptr) {
+                    // Gyro: scale raw counts only. omconvert calibrates only
+                    // when channel index c < OMCALIBRATE_AXES (accel under
+                    // default priority).
+                    // ref:
+                    // vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
+                    double* gyr_row = gyr_out + static_cast<size_t>(sample) * 3;
+                    for (int j = 0; j < num_gyro && j < 3; ++j) {
+                        const int c = channel_map.gyro[static_cast<size_t>(j)];
+                        gyr_row[j] = player.values[c] * player.scale[c];
+                    }
+                    for (int j = num_gyro; j < 3; ++j) {
+                        gyr_row[j] = 0.0;
+                    }
                 }
             }
-
-            clipped_mut(sample) = clipped;
         }
 
         py::dict out;
         out["time"] = time_arr;
         out["acc"] = acc_arr;
-        out["temp"] = temp_arr;
+        if (with_temp) {
+            out["temp"] = temp_arr;
+        } else {
+            out["temp"] = py::none();
+        }
         out["valid"] = valid_arr;
         out["clipped"] = clipped_arr;
         out["sample_rate_hz"] = rate;
@@ -686,11 +709,17 @@ PYBIND11_MODULE(_native, m) {
         .def("resample", &LoadedCwa::resample, py::arg("calibration"),
              py::arg("sample_rate_hz") = omcwa_defaults::kUseFileSampleRate,
              py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
+             py::arg("with_temp") = true,
              R"doc(
                 Resample to a uniform rate using om_convert_player_t.
 
                 sample_rate_hz: 0 uses arrangement.defaultRate.
                 interpolate: 1=nearest, 2=linear, 3=cubic.
+                with_temp: allocate the per-sample temperature array. Set
+                    False to skip it (8 bytes per sample) when the caller
+                    discards it. Temperature is still applied to the
+                    accelerometer calibration either way; only the output
+                    array is skipped. "temp" is then None in the result.
                 Accel is calibrated. Gyro is scaled only.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
             )doc");
