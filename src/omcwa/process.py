@@ -148,10 +148,13 @@ def process_cwa(
     if calibrate and not calibration.success and failure_policy == "raise":
         raise CalibrationError(calibration.error_code)
 
+    # ProcessedRecording has no temperature field, so skip allocating it:
+    # 8 bytes per sample, 575 MB on a 200-hour 100 Hz recording.
     result = loaded.resample(
         native_calibration,
         sample_rate_hz=sample_rate_hz,
         interpolate=int(interpolate),
+        with_temp=False,
     )
     metadata = _public_metadata(
         loaded,
