@@ -123,6 +123,40 @@ py::array_t<double> vec3_from_calibration(const double src[OMCALIBRATE_AXES]) {
     return arr;
 }
 
+// omcwa-only diagnostics from the stationary points that fed
+// OmCalibrateFindAutoCalibration. axis_min/max copy its internal per-axis
+// scan, so callers can tell error codes -1 through -4 apart without
+// re-running the fit. Range scan is omcalibrate.c:632-672.
+// Computed against the fitted calibration, before any identity fallback, so
+// mean_svm_error still reflects the fit that was attempted.
+// ref: vendored/omconvert/omcalibrate.c:OmCalibrateFindAutoCalibration:646
+struct CalibrationDiagnostics {
+    int num_stationary_points = 0;
+    double axis_min[OMCALIBRATE_AXES] = {0, 0, 0};
+    double axis_max[OMCALIBRATE_AXES] = {0, 0, 0};
+    double mean_svm_error = 0.0;
+};
+
+CalibrationDiagnostics
+compute_calibration_diagnostics(omcalibrate_calibration_t& native,
+                                omcalibrate_stationary_points_t* points) {
+    CalibrationDiagnostics diag;
+    diag.num_stationary_points = points->numValues;
+    for (int c = 0; c < OMCALIBRATE_AXES; ++c) {
+        for (int i = 0; i < points->numValues; ++i) {
+            const double v = points->values[i].mean[c];
+            if (i == 0 || v < diag.axis_min[c]) {
+                diag.axis_min[c] = v;
+            }
+            if (i == 0 || v > diag.axis_max[c]) {
+                diag.axis_max[c] = v;
+            }
+        }
+    }
+    diag.mean_svm_error = OmCalibrateMeanSvmError(&native, points);
+    return diag;
+}
+
 // Return only the first session. omconvert skips session 2 and later.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1146
 omdata_session_t* first_session(omdata_t* data) {
@@ -209,6 +243,14 @@ class Calibration {
     int num_axes = 0;
     bool success = true;
 
+    // omcwa-only diagnostics, not part of omcalibrate_calibration_t. Left at
+    // these zero defaults except by auto_calibrate(), which overwrites them
+    // once the stationary points are known.
+    int num_stationary_points = 0;
+    py::array_t<double> axis_min;
+    py::array_t<double> axis_max;
+    double mean_svm_error = 0.0;
+
     static Calibration from_native(const omcalibrate_calibration_t& native) {
         Calibration out;
         out.scale = vec3_from_calibration(native.scale);
@@ -218,6 +260,11 @@ class Calibration {
         out.error_code = native.errorCode;
         out.num_axes = native.numAxes;
         out.success = native.errorCode == 0;
+
+        const double zero[OMCALIBRATE_AXES] = {0, 0, 0};
+        out.axis_min = vec3_from_calibration(zero);
+        out.axis_max = vec3_from_calibration(zero);
+
         return out;
     }
 
@@ -411,6 +458,10 @@ class LoadedCwa {
         if (stationary_points == nullptr) {
             throw std::runtime_error("failed to find stationary points");
         }
+
+        const CalibrationDiagnostics diagnostics =
+            compute_calibration_diagnostics(native, stationary_points);
+
         // On auto-calibration failure, omconvert resets to identity calibration
         // but preserves errorCode and numAxes. OmCalibrateInit here matches
         // OmCalibrateCopy with a null defaultCalibration.
@@ -424,7 +475,14 @@ class LoadedCwa {
         }
 
         OmCalibrateFreeStationaryPoints(stationary_points);
-        return Calibration::from_native(native);
+
+        Calibration out = Calibration::from_native(native);
+        out.num_stationary_points = diagnostics.num_stationary_points;
+        out.axis_min = vec3_from_calibration(diagnostics.axis_min);
+        out.axis_max = vec3_from_calibration(diagnostics.axis_max);
+        out.mean_svm_error = diagnostics.mean_svm_error;
+
+        return out;
     }
 
     py::array_t<double> apply_calibration(
@@ -672,7 +730,20 @@ PYBIND11_MODULE(_native, m) {
         .def_readonly("num_axes", &Calibration::num_axes,
                       "Number of axes that contributed to the calibration fit.")
         .def_readonly("success", &Calibration::success,
-                      "True only when error_code == 0.");
+                      "True only when error_code == 0.")
+        .def_readonly("num_stationary_points",
+                      &Calibration::num_stationary_points,
+                      "Stationary points found before the calibration fit. "
+                      "Set only by auto_calibrate().")
+        .def_readonly("axis_min", &Calibration::axis_min,
+                      "Per-axis minimum of the stationary point means, "
+                      "shape (3,). Set only by auto_calibrate().")
+        .def_readonly("axis_max", &Calibration::axis_max,
+                      "Per-axis maximum of the stationary point means, "
+                      "shape (3,). Set only by auto_calibrate().")
+        .def_readonly("mean_svm_error", &Calibration::mean_svm_error,
+                      "Mean absolute deviation of stationary-point SVM from 1 g"
+                      " under this calibration. Set only by auto_calibrate().");
 
     py::class_<LoadedCwa>(
         m, "LoadedCwa",

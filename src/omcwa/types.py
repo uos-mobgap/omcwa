@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,19 @@ class Calibration:
     ref_temp: float
     error_code: int
     success: bool
+    num_axes: int = 0
+
+    # diagnostics below are only meaningful after auto-calibrate. identity()
+    # leaves them at their zero defaults. There are no stationary points to
+    # report.
+    num_stationary_points: int = 0
+    axis_min: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.zeros(3, dtype=np.float64)
+    )
+    axis_max: npt.NDArray[np.float64] = field(
+        default_factory=lambda: np.zeros(3, dtype=np.float64)
+    )
+    mean_svm_error: float = 0.0
 
     @classmethod
     def from_native(cls, native_cal: Any) -> Calibration:
@@ -34,6 +47,11 @@ class Calibration:
             ref_temp=float(native_cal.reference_temperature),
             error_code=int(native_cal.error_code),
             success=bool(native_cal.success),
+            num_axes=int(native_cal.num_axes),
+            num_stationary_points=int(native_cal.num_stationary_points),
+            axis_min=np.asarray(native_cal.axis_min, dtype=np.float64),
+            axis_max=np.asarray(native_cal.axis_max, dtype=np.float64),
+            mean_svm_error=float(native_cal.mean_svm_error),
         )
 
     @classmethod

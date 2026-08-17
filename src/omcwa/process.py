@@ -28,13 +28,23 @@ CalibrationFailurePolicy = Literal["raise", "identity"]
 
 
 class CalibrationError(RuntimeError):
-    """Raised when omconvert cannot find a valid auto-calibration."""
+    """Raised when omconvert cannot find a valid auto-calibration.
 
-    def __init__(self, error_code: int) -> None:
+    -1 and -2 need opposite remedies: -1 means the recording barely held
+    still, -2 means it held still but only ever in one posture. ``num_axes``
+    and the axis coverage in the message tell them apart.
+    """
+
+    def __init__(self, error_code: int, calibration: Calibration) -> None:
         self.error_code = int(error_code)
+        self.calibration = calibration
         super().__init__(
             "omconvert auto-calibration failed with "
-            f"error code {self.error_code}"
+            f"error code {self.error_code} "
+            f"({calibration.num_stationary_points} stationary points, "
+            f"{calibration.num_axes} axes within range, "
+            f"axis_min={calibration.axis_min.tolist()}, "
+            f"axis_max={calibration.axis_max.tolist()})"
         )
 
 
@@ -146,7 +156,7 @@ def process_cwa(
 
     calibration = Calibration.from_native(native_calibration)
     if calibrate and not calibration.success and failure_policy == "raise":
-        raise CalibrationError(calibration.error_code)
+        raise CalibrationError(calibration.error_code, calibration)
 
     # ProcessedRecording has no temperature field, so skip allocating it:
     # 8 bytes per sample, 575 MB on a 200-hour 100 Hz recording.
