@@ -61,6 +61,11 @@ def _calibration(error_code: int = 0) -> SimpleNamespace:
         reference_temperature=0.0,
         error_code=error_code,
         success=error_code == 0,
+        num_axes=0,
+        num_stationary_points=0,
+        axis_min=np.zeros(3, dtype=np.float64),
+        axis_max=np.zeros(3, dtype=np.float64),
+        mean_svm_error=0.0,
     )
 
 
