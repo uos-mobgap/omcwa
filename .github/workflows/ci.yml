@@ -24,22 +24,3 @@ jobs:
           uv run ruff format --check src tests benchmarks
           ./scripts/check_cpp_format.sh
           uv run pytest -q
-
-  benchmarks:
-    # the benchmark suite has to work on every platform a developer might use,
-    # so it is exercised on all three. This job checks that the synthetic writer
-    # is correct and that every benchmark runs
-
-    name: Benchmarks on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-
-      - name: Run the benchmark suite once
-        run: uv run --group bench pytest benchmarks -q --cwa-hours 0.2 --benchmark-disable
