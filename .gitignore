@@ -32,6 +32,10 @@ tests/fixtures/**/*.wav
 .coverage
 htmlcov/
 
+# Generated benchmark recordings and saved benchmark runs
+benchmarks/.cache/
+.benchmarks/
+
 # IDE
 .cursor/
 .idea/
