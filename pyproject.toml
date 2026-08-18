@@ -11,6 +11,7 @@ license = "BSD-2-Clause"
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "numpy>=1.25",
+    "pybind11>=3.1.0",
 ]
 
 [project.urls]
@@ -23,6 +24,12 @@ dev = [
     "pytest>=8",
     "ruff>=0.15.21",
 ]
+bench = [
+    "pytest>=8",
+    "pytest-benchmark>=5",
+    # peak resident memory only. Every other platform reads it from resource
+    "psutil>=5.9; sys_platform == 'win32'",
+]
 showcase = [
     "ipykernel>=6.25,<7",
     "jupyter>=1.1",
@@ -33,6 +40,12 @@ showcase = [
 dev = [
     "pytest>=8",
     "ruff>=0.15.21",
+]
+bench = [
+    "pytest>=8",
+    "pytest-benchmark>=5",
+    # peak resident memory only. Every other platform reads it from resource
+    "psutil>=5.9; sys_platform == 'win32'",
 ]
 showcase = [
     "ipykernel>=6.25,<7",
@@ -51,7 +64,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 80
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "benchmarks"]
 
 [tool.ruff.lint]
 select = [
