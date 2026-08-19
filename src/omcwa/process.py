@@ -1,4 +1,4 @@
-"""High-level CWA processing entry points."""
+"""Load and process CWA recordings."""
 
 from __future__ import annotations
 
@@ -78,10 +78,12 @@ def _processed_from_native(
     metadata: dict[str, Any],
 ) -> ProcessedRecording:
     gyr = result.get("gyr")
+    acc = np.asarray(result["acc"], dtype=np.float64)
     return ProcessedRecording(
         sample_rate_hz=float(result["sample_rate_hz"]),
-        time=np.asarray(result["time"], dtype=np.float64),
-        acc=np.asarray(result["acc"], dtype=np.float64),
+        start_time=float(result["start_time"]),
+        n_samples=acc.shape[0],
+        acc=acc,
         gyr=None if gyr is None else np.asarray(gyr, dtype=np.float64),
         calibration=calibration,
         metadata=metadata,
@@ -103,6 +105,7 @@ def load_cwa(path: str | Path) -> UniformRecording:
         _native.identity_calibration(),
         sample_rate_hz=USE_FILE_SAMPLE_RATE,
         interpolate=int(DEFAULT_INTERPOLATE),
+        with_time=False,
     )
     metadata = _public_metadata(
         loaded,
@@ -110,9 +113,12 @@ def load_cwa(path: str | Path) -> UniformRecording:
     )
 
     gyr = result.get("gyr")
+    acc = np.asarray(result["acc"], dtype=np.float64)
     return UniformRecording(
-        time=np.asarray(result["time"], dtype=np.float64),
-        acc=np.asarray(result["acc"], dtype=np.float64),
+        sample_rate_hz=float(result["sample_rate_hz"]),
+        start_time=float(result["start_time"]),
+        n_samples=acc.shape[0],
+        acc=acc,
         gyr=None if gyr is None else np.asarray(gyr, dtype=np.float64),
         temp=np.asarray(result["temp"], dtype=np.float64),
         metadata=metadata,
@@ -132,13 +138,13 @@ def process_cwa(
 ) -> ProcessedRecording:
     """Auto-calibrate and resample a CWA recording with vendored omconvert.
 
-    Auto-calibration uses the complete first session. By default, calibration
-    failure raises :class:`CalibrationError` before output arrays are
-    allocated. Set ``on_calibration_failure="identity"`` to explicitly accept
-    omconvert's identity fallback, or set ``calibrate=False`` to skip fitting.
+    Auto-calibration uses the first session. Calibration failure raises
+    :class:`CalibrationError` before output arrays are allocated. Set
+    ``on_calibration_failure="identity"`` to keep omconvert's identity
+    fallback, or set ``calibrate=False`` to skip fitting.
 
     ``sample_rate_hz=0`` selects the file default rate. ``time_range`` is a
-    half-open ``(start, stop)`` interval in Unix seconds and trims the output
+    half-open ``(start, stop)`` interval in Unix seconds. It trims the output
     only after full-file calibration and resampling.
     """
     failure_policy = _validate_failure_policy(on_calibration_failure)
@@ -158,13 +164,15 @@ def process_cwa(
     if calibrate and not calibration.success and failure_policy == "raise":
         raise CalibrationError(calibration.error_code, calibration)
 
-    # ProcessedRecording has no temperature field, so skip allocating it:
-    # 8 bytes per sample, 575 MB on a 200-hour 100 Hz recording.
+    # ProcessedRecording has no temperature field and derives time from
+    # start_time/sample_rate_hz, so skip allocating both. That is 16 bytes
+    # per sample, 1.15 GB on a 200-hour 100 Hz recording.
     result = loaded.resample(
         native_calibration,
         sample_rate_hz=sample_rate_hz,
         interpolate=int(interpolate),
         with_temp=False,
+        with_time=False,
     )
     metadata = _public_metadata(
         loaded,

@@ -18,7 +18,7 @@ class InterpolateMode(IntEnum):
 # ``arrangement.defaultRate``.
 USE_FILE_SAMPLE_RATE = 0.0
 
-# Default ``process_cwa`` / omgui form: auto rate (no explicit resample).
+# Default process_cwa / omgui: sample_rate_hz=0, no explicit resample.
 DEFAULT_SAMPLE_RATE_HZ = USE_FILE_SAMPLE_RATE
 DEFAULT_INTERPOLATE = InterpolateMode.CUBIC
 DEFAULT_STATIONARY_TIME = 10.0

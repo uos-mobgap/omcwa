@@ -1,12 +1,11 @@
 """Memory measurements for the omcwa pipeline.
 
-These use the same generated recording as the timing benchmarks, so both sets
-of numbers describe the same workload. The figures are printed as a
-table at the end of the run.
+Same generated recording as the timing benchmarks, so both sets of numbers
+describe the same workload. The figures print as a table at the end of the
+run.
 
-Every stage also asserts how much output it should allocate, which is exactly
-known from the sample count and the dtypes. That is what makes this a test
-rather than a report.
+Every stage also asserts the output allocation. That number is fixed once you
+know the sample count and the dtypes.
 """
 
 from __future__ import annotations
@@ -21,11 +20,16 @@ from synthetic_cwa import RecordingSpec
 # output bytes per sample: time 8, acc 24, temp 8, valid 1, clipped 1, plus
 # gyro 24 when the device has a gyroscope
 
-# every stage that produces output currently allocates all of them, including
-# process_cwa, which asks omconvert for a temperature array and then drops it
-# because ProcessedRecording has no temperature field. Should a stage stop
-# allocating one of these, this becomes a per-stage table
-OUTPUT_BYTES_PER_SAMPLE = {"AX3": 42, "AX6": 66}
+# resample() calls the native stage with its defaults, so it still allocates
+# every array. load_cwa() and process_cwa() pass with_time/with_temp.
+# ProcessedRecording and UniformRecording compute time from start_time and
+# sample_rate_hz instead of storing it, so those two stages allocate less
+# and each stage has its own budget.
+OUTPUT_BYTES_PER_SAMPLE = {
+    "resample": {"AX3": 42, "AX6": 66},
+    "load_cwa": {"AX3": 34, "AX6": 58},  # no time
+    "process_cwa": {"AX3": 26, "AX6": 50},  # no time, no temp
+}
 
 # stages that materialise output arrays. The rest run entirely inside
 # omconvert, which allocates with plain malloc that tracemalloc cannot see, so
@@ -67,7 +71,7 @@ def test_stage_memory(
     # memory and read as an improvement, so check that the work was done.
     assert measured["samples"] == recording_spec.sample_count
 
-    expected = OUTPUT_BYTES_PER_SAMPLE[recording_spec.device]
+    expected = OUTPUT_BYTES_PER_SAMPLE[stage][recording_spec.device]
     per_sample = measured["peak_array_bytes"] / measured["samples"]
     assert measured["peak_array_bytes"] == pytest.approx(
         expected * measured["samples"], abs=PYTHON_ALLOCATION_SLACK

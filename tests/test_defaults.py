@@ -98,6 +98,7 @@ class _FakeLoaded:
         output_rate = requested_rate if requested_rate > 0 else 100.0
         return {
             "sample_rate_hz": output_rate,
+            "start_time": 1.0,
             "time": np.array([1.0, 1.0 + 1.0 / output_rate]),
             "acc": np.zeros((2, 3), dtype=np.float64),
             "gyr": np.ones((2, 3), dtype=np.float64),
@@ -178,8 +179,10 @@ def test_process_forwards_defaults_and_loads_once(
     assert resample_options == {
         "sample_rate_hz": DEFAULT_SAMPLE_RATE_HZ,
         "interpolate": int(DEFAULT_INTERPOLATE),
-        # ProcessedRecording drops temperature, so it is never allocated.
+        # ProcessedRecording drops temperature and derives time, so neither
+        # is ever allocated.
         "with_temp": False,
+        "with_time": False,
     }
     assert calls["identity"] == []
     assert out.sample_rate_hz == 100.0
@@ -213,6 +216,7 @@ def test_process_forwards_explicit_primitive_options(
         "sample_rate_hz": 50.0,
         "interpolate": int(InterpolateMode.LINEAR),
         "with_temp": False,
+        "with_time": False,
     }
     assert out.sample_rate_hz == 50.0
     assert out.calibration.success is True
@@ -248,6 +252,7 @@ def test_load_cwa_uses_identity_at_file_rate(
     assert options == {
         "sample_rate_hz": USE_FILE_SAMPLE_RATE,
         "interpolate": int(DEFAULT_INTERPOLATE),
+        "with_time": False,
     }
     assert recording.acc.shape == (2, 3)
     assert recording.gyr is not None
