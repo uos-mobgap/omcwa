@@ -1,7 +1,6 @@
-// pybind11 adapter over vendored omconvert: mirrors OmConvertRunConvert but
-// writes numpy buffers instead of WAV/CSV files.
-// Also exposes stage primitives (load, calibrate, resample) for Python
-// injection.
+// pybind11 adapter over vendored omconvert. Mirrors OmConvertRunConvert but
+// writes numpy buffers instead of WAV/CSV files. Python can also call load,
+// calibrate, and resample as separate stages.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1049
 
 #include <cstdio>
@@ -286,8 +285,8 @@ class Calibration {
     }
 };
 
-// Owns a loaded omdata_t for the object lifetime (OmDataLoad on load,
-// OmDataFree on destruction). Copy is disabled. move transfers ownership.
+// Owns a loaded omdata_t for the object lifetime. OmDataLoad on load,
+// OmDataFree on destruction. Copy is disabled. Move transfers ownership.
 class LoadedCwa {
   public:
     static LoadedCwa load(const std::string& path) {
@@ -503,9 +502,8 @@ class LoadedCwa {
             temp_scalar = true;
             temp_scalar_value = temp_obj.cast<double>();
         } else {
-            temp_arr =
-                py::array_t<double, py::array::c_style | py::array::forcecast>(
-                    temp_obj);
+            temp_arr = py::array_t < double,
+            py::array::c_style | py::array::forcecast > (temp_obj);
             auto temp_in = temp_arr.unchecked<1>();
             if (temp_in.ndim() != 1 || temp_in.shape(0) != n) {
                 throw std::invalid_argument(
@@ -532,7 +530,7 @@ class LoadedCwa {
     resample(const Calibration& calibration,
              double sample_rate_hz = omcwa_defaults::kUseFileSampleRate,
              int interpolate = omcwa_defaults::kDefaultInterpolate,
-             bool with_temp = true) const {
+             bool with_temp = true, bool with_time = true) const {
         QuietNativeIo quiet;
         omdata_session_t* session =
             first_session(const_cast<omdata_t*>(&data_));
@@ -560,13 +558,18 @@ class LoadedCwa {
         const auto native_cal = calibration.to_native();
 
         // Output arrays are sized by num_samples and dominate peak memory
-        // (66 bytes/sample with gyro). temp is 8 of those bytes and is only
-        // materialised when the caller wants it: process_cwa() drops it,
-        // load_cwa() keeps it.
-        py::array_t<double> time_arr(num_samples);
+        // (66 bytes/sample with gyro). temp and time are 8 bytes each.
+        // Allocate them only when the caller wants them. Time is a uniform
+        // grid from start_time and sample_rate_hz, so Python can rebuild it
+        // instead of holding it here.
         py::array_t<double> acc_arr = make_2d_array(num_samples, 3);
         py::array_t<bool> valid_arr(num_samples);
         py::array_t<bool> clipped_arr(num_samples);
+
+        py::array_t<double> time_arr;
+        if (with_time) {
+            time_arr = py::array_t<double>(num_samples);
+        }
 
         py::array_t<double> temp_arr;
         if (with_temp) {
@@ -581,7 +584,7 @@ class LoadedCwa {
 
         // Raw pointers so the sample loop touches no Python state and can run
         // with the GIL released.
-        double* time_out = time_arr.mutable_data();
+        double* time_out = with_time ? time_arr.mutable_data() : nullptr;
         double* acc_out = acc_arr.mutable_data();
         bool* valid_out = valid_arr.mutable_data();
         bool* clipped_out = clipped_arr.mutable_data();
@@ -594,9 +597,10 @@ class LoadedCwa {
             for (int sample = 0; sample < num_samples; ++sample) {
                 OmConvertPlayerSeek(&player, sample);
 
-                const double t =
-                    arrangement.startTime + static_cast<double>(sample) / rate;
-                time_out[sample] = t;
+                if (time_out != nullptr) {
+                    time_out[sample] = arrangement.startTime +
+                                       static_cast<double>(sample) / rate;
+                }
                 valid_out[sample] = player.valid != 0;
                 clipped_out[sample] = player.clipped;
                 if (temp_out != nullptr) {
@@ -639,7 +643,11 @@ class LoadedCwa {
         }
 
         py::dict out;
-        out["time"] = time_arr;
+        if (with_time) {
+            out["time"] = time_arr;
+        } else {
+            out["time"] = py::none();
+        }
         out["acc"] = acc_arr;
         if (with_temp) {
             out["temp"] = temp_arr;
@@ -672,8 +680,8 @@ Calibration identity_calibration() {
     return Calibration::from_native(native);
 }
 
-// One-shot load, calibrate, and resample. composes LoadedCwa methods.
-// Used by the Python fast path in src/omcwa/process.py.
+// Load, calibrate, and resample in one call. Calls LoadedCwa methods.
+// Used by the Python path in src/omcwa/process.py.
 py::dict process_cwa_native(
     const std::string& path,
     double sample_rate_hz = omcwa_defaults::kDefaultSampleRateHz,
@@ -723,7 +731,7 @@ PYBIND11_MODULE(_native, m) {
                       "Reference temperature used during calibration.")
         .def_readonly("error_code", &Calibration::error_code,
                       R"doc(
-                0 on success. negative omconvert error code on identity
+                0 on success. Negative omconvert error code on identity
                 fallback.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1196
             )doc")
@@ -780,17 +788,20 @@ PYBIND11_MODULE(_native, m) {
         .def("resample", &LoadedCwa::resample, py::arg("calibration"),
              py::arg("sample_rate_hz") = omcwa_defaults::kUseFileSampleRate,
              py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
-             py::arg("with_temp") = true,
+             py::arg("with_temp") = true, py::arg("with_time") = true,
              R"doc(
                 Resample to a uniform rate using om_convert_player_t.
 
                 sample_rate_hz: 0 uses arrangement.defaultRate.
                 interpolate: 1=nearest, 2=linear, 3=cubic.
-                with_temp: allocate the per-sample temperature array. Set
-                    False to skip it (8 bytes per sample) when the caller
-                    discards it. Temperature is still applied to the
-                    accelerometer calibration either way; only the output
-                    array is skipped. "temp" is then None in the result.
+                with_temp: allocate the per-sample temperature array.
+                    False skips it, 8 bytes per sample. Calibration still
+                    uses temperature. Only the output array is skipped, and
+                    "temp" is None in the result.
+                with_time: allocate the per-sample time array. False skips
+                    it, 8 bytes per sample. The caller can rebuild the
+                    uniform grid from start_time and sample_rate_hz.
+                    "time" is then None in the result.
                 Accel is calibrated. Gyro is scaled only.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
             )doc");

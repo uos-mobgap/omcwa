@@ -1,8 +1,7 @@
 """Benchmarks for the omcwa pipeline.
 
-Four measurements, one per stage plus the public entry point that composes
-them. Every stage is measured on the same recording so the numbers add up and
-can be compared against each other.
+One measurement per pipeline stage, plus ``process_cwa`` which runs all of
+them. Every test uses the same recording, so the numbers should add up.
 
 Run them with ``uv run pytest benchmarks``. See ``benchmarks/README.md`` for
 what the numbers mean and how to compare two runs.
@@ -36,7 +35,7 @@ def test_auto_calibrate(benchmark, loaded_cwa: _native.LoadedCwa) -> None:
     """Scan a decoded recording for stationary points and fit a calibration.
 
     The generated recording always calibrates successfully, so this measures a
-    complete fit rather than an early exit.
+    complete fit, not an early exit.
     """
     calibration = benchmark(
         loaded_cwa.auto_calibrate,
@@ -50,8 +49,8 @@ def test_auto_calibrate(benchmark, loaded_cwa: _native.LoadedCwa) -> None:
 def test_resample(benchmark, loaded_cwa: _native.LoadedCwa) -> None:
     """Interpolate a decoded recording onto a uniform grid.
 
-    Identity calibration is used so that the measurement covers interpolation
-    and output allocation only, without a calibration fit in front of it.
+    Uses identity calibration so the measurement covers interpolation and
+    output allocation, with no calibration fit in front.
     """
     result = benchmark(
         loaded_cwa.resample,

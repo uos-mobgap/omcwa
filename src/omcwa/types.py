@@ -1,8 +1,9 @@
-"""Core recording and calibration types."""
+"""Recording and calibration types."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -71,16 +72,42 @@ class Calibration:
 class UniformRecording:
     """Uncalibrated IMU samples on a uniform grid at the file default rate.
 
-    Arrays are float64 in physical units (g for accelerometer, dps for
-    gyroscope). Calibration is identity (pre-cal / uncalibrated).
+    Arrays are float64, accelerometer in g and gyroscope in dps.
+    Calibration is identity.
     """
 
-    time: npt.NDArray[np.float64]
+    sample_rate_hz: float
+    start_time: float
+    n_samples: int
     acc: npt.NDArray[np.float64]
     gyr: npt.NDArray[np.float64] | None
     temp: npt.NDArray[np.float64]
     metadata: dict[str, Any]
     path: str
+    
+    # set only when the timeline is not uniform, e.g. after dropping invalid
+    # samples. None means every sample sits on the start_time/sample_rate_hz
+    # grid, so time is computed from those fields instead of stored.
+    time_override: npt.NDArray[np.float64] | None = None
+
+    @cached_property
+    def time(self) -> npt.NDArray[np.float64]:
+        """Unix seconds per sample. Built on first access, cached after."""
+        if self.time_override is not None:
+            return self.time_override
+
+        return (
+            self.start_time
+            + np.arange(self.n_samples, dtype=np.float64) / self.sample_rate_hz
+        )
+
+    @property
+    def first_sample_time(self) -> float:
+        """Time of the first sample. Allocates nothing."""
+        if self.time_override is not None:
+            return float(self.time_override[0])
+
+        return self.start_time
 
 
 @dataclass
@@ -91,13 +118,36 @@ class ProcessedRecording:
     """
 
     sample_rate_hz: float
-    time: npt.NDArray[np.float64]
+    start_time: float
+    n_samples: int
     acc: npt.NDArray[np.float64]
     gyr: npt.NDArray[np.float64] | None
     calibration: Calibration
     metadata: dict[str, Any]
     valid: npt.NDArray[np.bool_]
     clipped: npt.NDArray[np.bool_]
+    
+    # see UniformRecording.time_override.
+    time_override: npt.NDArray[np.float64] | None = None
+
+    @cached_property
+    def time(self) -> npt.NDArray[np.float64]:
+        """Unix seconds per sample. Built on first access, cached after."""
+        if self.time_override is not None:
+            return self.time_override
+        
+        return (
+            self.start_time
+            + np.arange(self.n_samples, dtype=np.float64) / self.sample_rate_hz
+        )
+
+    @property
+    def first_sample_time(self) -> float:
+        """Time of the first sample. Allocates nothing."""
+        if self.time_override is not None:
+            return float(self.time_override[0])
+        
+        return self.start_time
 
 
 def ensure_path_str(path: str | Path) -> str:

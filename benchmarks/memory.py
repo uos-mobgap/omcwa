@@ -1,27 +1,24 @@
 """Measure the memory a pipeline stage needs.
 
-Two numbers are reported per stage:
+Each stage reports two figures.
 
-* **Peak resident memory** is the honest answer to whether a recording fits on a
-given machine. It is a process-wide high water mark, which no platform lets us
-reset portably, so each stage is measured in a fresh subprocess. That also
-keeps the timing benchmarks from polluting the figure. It includes resident
-pages of the memory-mapped recording, which are clean and evictable rather than
-real pressure, so subtract the file size when comparing against a memory
-budget.
+Peak resident memory is the process high-water mark since start. No platform
+lets us reset that portably, so each stage runs in a fresh subprocess. That
+also keeps the timing benchmarks from sharing the process. Resident pages of
+the memory-mapped recording count toward the mark even though they are clean
+and the OS can drop them. Subtract the file size when you compare against a
+memory budget.
 
-* **Peak array bytes** is what the package itself allocates for output. NumPy
-registers its allocations with :mod:`tracemalloc`, so this is exact, identical
-on every platform, and proportional to the output sample count. It is the
-number to assert on and the number to compare between branches. It does not
-include the memory-mapped file or the decoded structures that omconvert
-allocates with plain ``malloc``, which :mod:`tracemalloc` cannot see.
+Peak array bytes is what this package allocated for output arrays. NumPy
+registers those with :mod:`tracemalloc`, so the number is the same on every
+platform and scales with the output sample count. Assert on this one, and
+compare it between branches. It does not include the memory-mapped file, or
+the decoded structures omconvert allocates with plain ``malloc``.
+tracemalloc cannot see those.
 
-Run one stage directly to get its figures as JSON:
+Run one stage directly to print the figures as JSON::
 
-```
-python benchmarks/memory.py resample path/to/recording.cwa
-```
+    python benchmarks/memory.py resample path/to/recording.cwa
 """
 
 from __future__ import annotations
@@ -82,14 +79,14 @@ def _resample(path: str) -> int:
 
 
 def _load_cwa(path: str) -> int:
-    return int(load_cwa(path).time.shape[0])
+    return load_cwa(path).n_samples
 
 
 def _process_cwa(path: str) -> int:
-    return int(process_cwa(path).time.shape[0])
+    return process_cwa(path).n_samples
 
 
-# each stage runs the work a caller would run, including whatever has to happen
+# Each stage runs the work a caller would run, including whatever has to happen
 # first. Calibrating needs a loaded recording, so the calibrate figures include
 # loading, which is what a caller actually pays.
 STAGES: dict[str, Callable[[str], int]] = {
