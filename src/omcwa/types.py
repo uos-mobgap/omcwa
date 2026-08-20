@@ -86,7 +86,7 @@ class UniformRecording:
     temp: npt.NDArray[np.float64]
     metadata: dict[str, Any]
     path: str
-    
+
     # set only when the timeline is not uniform, e.g. after dropping invalid
     # samples. None means every sample sits on the start_time/sample_rate_hz
     # grid, so time is computed from those fields instead of stored.
@@ -130,7 +130,7 @@ class ProcessedRecording:
     metadata: dict[str, Any]
     valid: npt.NDArray[np.bool_]
     clipped: npt.NDArray[np.bool_]
-    
+
     # see UniformRecording.time_override.
     time_override: npt.NDArray[np.float64] | None = None
 
@@ -139,7 +139,7 @@ class ProcessedRecording:
         """Unix seconds per sample. Built on first access, cached after."""
         if self.time_override is not None:
             return self.time_override
-        
+
         return (
             self.start_time
             + np.arange(self.n_samples, dtype=np.float64) / self.sample_rate_hz
@@ -150,7 +150,7 @@ class ProcessedRecording:
         """Time of the first sample. Allocates nothing."""
         if self.time_override is not None:
             return float(self.time_override[0])
-        
+
         return self.start_time
 
 
