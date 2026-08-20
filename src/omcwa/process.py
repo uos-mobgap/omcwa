@@ -11,6 +11,7 @@ import numpy as np
 from omcwa import _native
 from omcwa.defaults import (
     DEFAULT_CALIBRATE,
+    DEFAULT_DTYPE,
     DEFAULT_INTERPOLATE,
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
@@ -25,6 +26,7 @@ from omcwa.types import (
 )
 
 CalibrationFailurePolicy = Literal["raise", "identity"]
+Dtype = Literal["float64", "float32"]
 
 
 class CalibrationError(RuntimeError):
@@ -60,6 +62,13 @@ def _validate_failure_policy(
     return on_calibration_failure
 
 
+def _validate_dtype(dtype: str) -> Dtype:
+    if dtype not in {"float64", "float32"}:
+        msg = f"dtype must be 'float64' or 'float32', got {dtype!r}"
+        raise ValueError(msg)
+    return dtype
+
+
 def _public_metadata(
     loaded: Any,
     *,
@@ -77,14 +86,17 @@ def _processed_from_native(
     calibration: Calibration,
     metadata: dict[str, Any],
 ) -> ProcessedRecording:
+    # acc/gyr keep whatever dtype the native resample loop wrote (float64 or
+    # float32, see the dtype argument to process_cwa). np.asarray must not
+    # force a dtype here or it silently copies float32 back to float64.
     gyr = result.get("gyr")
-    acc = np.asarray(result["acc"], dtype=np.float64)
+    acc = np.asarray(result["acc"])
     return ProcessedRecording(
         sample_rate_hz=float(result["sample_rate_hz"]),
         start_time=float(result["start_time"]),
         n_samples=acc.shape[0],
         acc=acc,
-        gyr=None if gyr is None else np.asarray(gyr, dtype=np.float64),
+        gyr=None if gyr is None else np.asarray(gyr),
         calibration=calibration,
         metadata=metadata,
         valid=np.asarray(result["valid"], dtype=np.bool_),
@@ -92,13 +104,21 @@ def _processed_from_native(
     )
 
 
-def load_cwa(path: str | Path) -> UniformRecording:
+def load_cwa(
+    path: str | Path,
+    *,
+    dtype: Dtype = DEFAULT_DTYPE,
+) -> UniformRecording:
     """Load uncalibrated samples at the file default sample rate.
 
     The returned arrays are uniformly resampled with identity calibration.
     Accelerometer values are in g, gyroscope values are in degrees per second,
     temperature is in degrees Celsius, and time is Unix seconds.
+
+    ``dtype="float64"`` matches every consumer today. ``"float32"`` halves
+    ``acc``/``gyr`` memory. ``temp`` and ``time`` stay float64 regardless.
     """
+    output_dtype = _validate_dtype(dtype)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
     result = loaded.resample(
@@ -106,6 +126,7 @@ def load_cwa(path: str | Path) -> UniformRecording:
         sample_rate_hz=USE_FILE_SAMPLE_RATE,
         interpolate=int(DEFAULT_INTERPOLATE),
         with_time=False,
+        as_float32=output_dtype == "float32",
     )
     metadata = _public_metadata(
         loaded,
@@ -113,13 +134,13 @@ def load_cwa(path: str | Path) -> UniformRecording:
     )
 
     gyr = result.get("gyr")
-    acc = np.asarray(result["acc"], dtype=np.float64)
+    acc = np.asarray(result["acc"])
     return UniformRecording(
         sample_rate_hz=float(result["sample_rate_hz"]),
         start_time=float(result["start_time"]),
         n_samples=acc.shape[0],
         acc=acc,
-        gyr=None if gyr is None else np.asarray(gyr, dtype=np.float64),
+        gyr=None if gyr is None else np.asarray(gyr),
         temp=np.asarray(result["temp"], dtype=np.float64),
         metadata=metadata,
         path=path_str,
@@ -135,6 +156,7 @@ def process_cwa(
     stationary_time: float = DEFAULT_STATIONARY_TIME,
     on_calibration_failure: CalibrationFailurePolicy = "raise",
     time_range: tuple[float, float] | None = None,
+    dtype: Dtype = DEFAULT_DTYPE,
 ) -> ProcessedRecording:
     """Auto-calibrate and resample a CWA recording with vendored omconvert.
 
@@ -146,8 +168,14 @@ def process_cwa(
     ``sample_rate_hz=0`` selects the file default rate. ``time_range`` is a
     half-open ``(start, stop)`` interval in Unix seconds. It trims the output
     only after full-file calibration and resampling.
+
+    ``dtype="float64"`` matches every consumer today. ``"float32"`` halves
+    ``acc``/``gyr`` memory, and ``time`` stays float64 regardless. Output is
+    within one float32 ULP of the float64 result, but verify against a
+    downstream pipeline before switching its default.
     """
     failure_policy = _validate_failure_policy(on_calibration_failure)
+    output_dtype = _validate_dtype(dtype)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
 
@@ -173,6 +201,7 @@ def process_cwa(
         interpolate=int(interpolate),
         with_temp=False,
         with_time=False,
+        as_float32=output_dtype == "float32",
     )
     metadata = _public_metadata(
         loaded,

@@ -13,6 +13,7 @@ import pytest
 from omcwa import CalibrationError, _native, load_cwa, process_cwa
 from omcwa.defaults import (
     DEFAULT_CALIBRATE,
+    DEFAULT_DTYPE,
     DEFAULT_INTERPOLATE,
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
@@ -146,6 +147,7 @@ def test_default_constants() -> None:
     assert int(DEFAULT_INTERPOLATE) == 3
     assert DEFAULT_STATIONARY_TIME == 10.0
     assert DEFAULT_CALIBRATE is True
+    assert DEFAULT_DTYPE == "float64"
 
 
 def test_python_defaults_match_cpp_header() -> None:
@@ -157,7 +159,7 @@ def test_python_defaults_match_cpp_header() -> None:
     assert _cpp_int("kDefaultInterpolate") == int(DEFAULT_INTERPOLATE)
     assert _cpp_float("kDefaultStationaryTime") == DEFAULT_STATIONARY_TIME
     assert _cpp_constexpr("kDefaultCalibrate") == "true"
-
+    assert _cpp_constexpr("kDefaultAsFloat32") == "false"
 
 def test_process_forwards_defaults_and_loads_once(
     monkeypatch: pytest.MonkeyPatch,
@@ -183,6 +185,7 @@ def test_process_forwards_defaults_and_loads_once(
         # is ever allocated.
         "with_temp": False,
         "with_time": False,
+        "as_float32": False,
     }
     assert calls["identity"] == []
     assert out.sample_rate_hz == 100.0
@@ -192,6 +195,22 @@ def test_process_forwards_defaults_and_loads_once(
         "default_rate": 100.0,
         "sample_rate_hz": 100.0,
     }
+
+
+def test_process_forwards_dtype(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _native_spy(monkeypatch)
+
+    process_cwa("recording.cwa", dtype="float32")
+
+    _, resample_options = calls["resample"][0]
+    assert resample_options["as_float32"] is True
+
+
+def test_process_rejects_invalid_dtype() -> None:
+    with pytest.raises(ValueError, match="dtype must be"):
+        process_cwa("recording.cwa", dtype="float16")
 
 
 def test_process_forwards_explicit_primitive_options(
@@ -217,6 +236,7 @@ def test_process_forwards_explicit_primitive_options(
         "interpolate": int(InterpolateMode.LINEAR),
         "with_temp": False,
         "with_time": False,
+        "as_float32": False,
     }
     assert out.sample_rate_hz == 50.0
     assert out.calibration.success is True
@@ -237,6 +257,22 @@ def test_strict_calibration_failure_precedes_resample(
     assert calls["metadata"] == []
 
 
+def test_load_cwa_forwards_dtype(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _native_spy(monkeypatch)
+
+    load_cwa("recording.cwa", dtype="float32")
+
+    _, options = calls["resample"][0]
+    assert options["as_float32"] is True
+
+
+def test_load_cwa_rejects_invalid_dtype() -> None:
+    with pytest.raises(ValueError, match="dtype must be"):
+        load_cwa("recording.cwa", dtype="float16")
+
+
 def test_load_cwa_uses_identity_at_file_rate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -253,6 +289,7 @@ def test_load_cwa_uses_identity_at_file_rate(
         "sample_rate_hz": USE_FILE_SAMPLE_RATE,
         "interpolate": int(DEFAULT_INTERPOLATE),
         "with_time": False,
+        "as_float32": False,
     }
     assert recording.acc.shape == (2, 3)
     assert recording.gyr is not None

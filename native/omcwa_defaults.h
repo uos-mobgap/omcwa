@@ -12,5 +12,6 @@ constexpr int kInterpolateCubic = 3;
 constexpr int kDefaultInterpolate = kInterpolateCubic;
 constexpr double kDefaultStationaryTime = 10.0;
 constexpr bool kDefaultCalibrate = true;
+constexpr bool kDefaultAsFloat32 = false;
 
 } // namespace omcwa_defaults
