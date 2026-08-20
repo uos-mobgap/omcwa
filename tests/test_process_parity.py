@@ -85,6 +85,7 @@ def test_successful_calibration_matches_reference_oracles(
     out = process_cwa(
         cal_success_cwa,
         sample_rate_hz=TARGET_RATE_HZ,
+        calibration_source="player",
     )
 
     calibration = out.calibration
@@ -102,6 +103,45 @@ def test_successful_calibration_matches_reference_oracles(
         abs=CALIBRATION_TOLERANCE,
     )
     _assert_output_matches_golden(out.acc, out.gyr, output_golden)
+
+
+def test_ax6_data_calibration_stays_close_to_player(
+    cal_success_cwa: Path,
+) -> None:
+    data = process_cwa(
+        cal_success_cwa,
+        sample_rate_hz=TARGET_RATE_HZ,
+    )
+    player = process_cwa(
+        cal_success_cwa,
+        sample_rate_hz=TARGET_RATE_HZ,
+        calibration_source="player",
+    )
+
+    assert data.calibration.success is True
+    assert (
+        data.calibration.num_stationary_points
+        == player.calibration.num_stationary_points
+    )
+    for field in ("scale", "offset", "temp_offset"):
+        np.testing.assert_allclose(
+            getattr(data.calibration, field),
+            getattr(player.calibration, field),
+            atol=CALIBRATION_TOLERANCE,
+            rtol=0.0,
+        )
+    np.testing.assert_allclose(
+        data.acc,
+        player.acc,
+        atol=ACCEL_LSB_G,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        data.gyr,
+        player.gyr,
+        atol=GYRO_LSB_DPS,
+        rtol=0.0,
+    )
 
 
 @pytest.mark.parametrize(
@@ -291,10 +331,16 @@ def test_float32_output_matches_float64_within_one_ulp(
 
     ulp = np.finfo(np.float32).eps
     np.testing.assert_allclose(
-        f32.acc, f64.acc, rtol=ulp, atol=ulp,
+        f32.acc,
+        f64.acc,
+        rtol=ulp,
+        atol=ulp,
     )
     np.testing.assert_allclose(
-        f32.gyr, f64.gyr, rtol=ulp, atol=ulp,
+        f32.gyr,
+        f64.gyr,
+        rtol=ulp,
+        atol=ulp,
     )
     # time is never narrowed. Unix-epoch magnitude needs float64 precision.
     assert f32.time.dtype == np.float64
