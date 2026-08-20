@@ -24,24 +24,3 @@ jobs:
           uv run ruff format --check src tests benchmarks
           ./scripts/check_cpp_format.sh
           uv run pytest -q
-
-  vendor-diff:
-    name: Vendored omconvert delta
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Fetch vendor/omconvert
-        run: git fetch origin refs/heads/vendor/omconvert:refs/heads/vendor/omconvert
-        continue-on-error: true
-
-      - name: Show local delta vs upstream
-        run: |
-          if git rev-parse --verify --quiet vendor/omconvert >/dev/null || git rev-parse --verify --quiet origin/vendor/omconvert >/dev/null; then
-            ./scripts/vendor_diff.sh --stat
-          else
-            echo "vendor/omconvert is not on origin yet; skip"
-          fi
