@@ -301,7 +301,7 @@ static double OmDataSampleRate(const void *buffer, char streamIndex, double *out
 // civil time with no DST and no leap seconds, so the full timegm() machinery
 // is not needed. This is the standard days-from-civil algorithm (Howard
 // Hinnant, public domain), measured at ~2 ns/call.
-// See native/patches/README.md.
+// See native/VENDORING.md.
 static int64_t OmCwaDaysFromCivil(int y, unsigned m, unsigned d)
 {
 	y -= m <= 2;

@@ -34,7 +34,7 @@ We use [clang-format](https://clang.llvm.org/docs/ClangFormat.html) (LLVM style,
 
 **Scope**
 
-Only format omcwa-owned bridge files. Do not clang-format `native/vendored/omconvert/`. That folder is an upstream snapshot.
+Only format omcwa-owned bridge files. Do not clang-format `native/vendored/omconvert/`. That folder is an upstream snapshot plus the local performance changes documented in `native/VENDORING.md`.
 
 **Conventions**
 
