@@ -254,6 +254,53 @@ def test_load_cwa_preserves_temperature_and_path(
     assert all(not key.startswith("_") for key in uniform.metadata)
 
 
+def test_load_cwa_float32_matches_float64_within_one_ulp(
+    resample_only_cwa: Path,
+) -> None:
+    f64 = load_cwa(resample_only_cwa, dtype="float64")
+    f32 = load_cwa(resample_only_cwa, dtype="float32")
+
+    assert f64.acc.dtype == np.float64
+    assert f32.acc.dtype == np.float32
+    assert f32.gyr is not None
+    assert f32.gyr.dtype == np.float32
+    assert f32.temp.dtype == np.float64
+
+    ulp = np.finfo(np.float32).eps
+    np.testing.assert_allclose(f32.acc, f64.acc, rtol=ulp, atol=ulp)
+    np.testing.assert_allclose(f32.gyr, f64.gyr, rtol=ulp, atol=ulp)
+    assert f32.time.dtype == np.float64
+    np.testing.assert_array_equal(f32.time, f64.time)
+
+
+def test_float32_output_matches_float64_within_one_ulp(
+    cal_success_cwa: Path,
+) -> None:
+    """See docs/performance-plan.md section 2.3: the real mobgap algorithms
+    ran bit identical on float32 vs float64 input except for the two
+    integrated outputs, which drifted by exactly one float32 ULP. That is
+    the property this test checks at the omcwa boundary, not bit equality.
+    """
+    f64 = process_cwa(cal_success_cwa, dtype="float64")
+    f32 = process_cwa(cal_success_cwa, dtype="float32")
+
+    assert f64.acc.dtype == np.float64
+    assert f32.acc.dtype == np.float32
+    assert f32.gyr is not None
+    assert f32.gyr.dtype == np.float32
+
+    ulp = np.finfo(np.float32).eps
+    np.testing.assert_allclose(
+        f32.acc, f64.acc, rtol=ulp, atol=ulp,
+    )
+    np.testing.assert_allclose(
+        f32.gyr, f64.gyr, rtol=ulp, atol=ulp,
+    )
+    # time is never narrowed. Unix-epoch magnitude needs float64 precision.
+    assert f32.time.dtype == np.float64
+    np.testing.assert_array_equal(f32.time, f64.time)
+
+
 def test_time_range_is_half_open_post_processing_trim(
     cal_success_cwa: Path,
 ) -> None:

@@ -206,8 +206,9 @@ struct ChannelMap {
     std::vector<int> gyro;
 };
 
-py::array_t<double> make_2d_array(py::ssize_t rows, py::ssize_t cols) {
-    return py::array_t<double>(std::vector<py::ssize_t>{rows, cols});
+template <typename T>
+py::array_t<T> make_2d_array(py::ssize_t rows, py::ssize_t cols) {
+    return py::array_t<T>(std::vector<py::ssize_t>{rows, cols});
 }
 
 // Map player channel indices to logical accel/gyro axes for numpy (n, 3)
@@ -512,7 +513,7 @@ class LoadedCwa {
         }
 
         const auto native = calibration.to_native();
-        py::array_t<double> acc_out = make_2d_array(n, 3);
+        py::array_t<double> acc_out = make_2d_array<double>(n, 3);
         auto acc_out_mut = acc_out.mutable_unchecked<2>();
 
         for (py::ssize_t i = 0; i < n; ++i) {
@@ -530,7 +531,25 @@ class LoadedCwa {
     resample(const Calibration& calibration,
              double sample_rate_hz = omcwa_defaults::kUseFileSampleRate,
              int interpolate = omcwa_defaults::kDefaultInterpolate,
-             bool with_temp = true, bool with_time = true) const {
+             bool with_temp = true, bool with_time = true,
+             bool as_float32 = omcwa_defaults::kDefaultAsFloat32) const {
+        // acc/gyr dominate peak memory, so their width is the caller's
+        // choice. time, temp, valid and clipped stay at their natural width
+        // regardless. time needs float64 precision at unix-epoch magnitude,
+        // and the others are already minimal.
+        if (as_float32) {
+            return resample_impl<float>(calibration, sample_rate_hz,
+                                        interpolate, with_temp, with_time);
+        }
+        return resample_impl<double>(calibration, sample_rate_hz, interpolate,
+                                     with_temp, with_time);
+    }
+
+  private:
+    template <typename T>
+    py::dict
+    resample_impl(const Calibration& calibration, double sample_rate_hz,
+                  int interpolate, bool with_temp, bool with_time) const {
         QuietNativeIo quiet;
         omdata_session_t* session =
             first_session(const_cast<omdata_t*>(&data_));
@@ -558,11 +577,11 @@ class LoadedCwa {
         const auto native_cal = calibration.to_native();
 
         // Output arrays are sized by num_samples and dominate peak memory
-        // (66 bytes/sample with gyro). temp and time are 8 bytes each.
-        // Allocate them only when the caller wants them. Time is a uniform
-        // grid from start_time and sample_rate_hz, so Python can rebuild it
-        // instead of holding it here.
-        py::array_t<double> acc_arr = make_2d_array(num_samples, 3);
+        // (66 bytes/sample with gyro at T=double). temp and time are 8
+        // bytes each. Allocate them only when the caller wants them. Time
+        // is a uniform grid from start_time and sample_rate_hz, so Python
+        // can rebuild it instead of holding it here.
+        py::array_t<T> acc_arr = make_2d_array<T>(num_samples, 3);
         py::array_t<bool> valid_arr(num_samples);
         py::array_t<bool> clipped_arr(num_samples);
 
@@ -577,19 +596,19 @@ class LoadedCwa {
         }
 
         const bool has_gyro = num_gyro > 0;
-        py::array_t<double> gyr_arr;
+        py::array_t<T> gyr_arr;
         if (has_gyro) {
-            gyr_arr = make_2d_array(num_samples, 3);
+            gyr_arr = make_2d_array<T>(num_samples, 3);
         }
 
         // Raw pointers so the sample loop touches no Python state and can run
         // with the GIL released.
         double* time_out = with_time ? time_arr.mutable_data() : nullptr;
-        double* acc_out = acc_arr.mutable_data();
+        T* acc_out = acc_arr.mutable_data();
         bool* valid_out = valid_arr.mutable_data();
         bool* clipped_out = clipped_arr.mutable_data();
         double* temp_out = with_temp ? temp_arr.mutable_data() : nullptr;
-        double* gyr_out = has_gyro ? gyr_arr.mutable_data() : nullptr;
+        T* gyr_out = has_gyro ? gyr_arr.mutable_data() : nullptr;
 
         {
             py::gil_scoped_release unlock;
@@ -608,9 +627,10 @@ class LoadedCwa {
                 }
 
                 // Accel: scale raw counts to g, then apply calibration on the
-                // first three accel axes.
+                // first three accel axes. Calibration runs in double
+                // regardless of T. Only the store narrows.
                 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
-                double* acc_row = acc_out + static_cast<size_t>(sample) * 3;
+                T* acc_row = acc_out + static_cast<size_t>(sample) * 3;
                 for (int j = 0; j < num_accel && j < 3; ++j) {
                     const int c = channel_map.accel[static_cast<size_t>(j)];
                     double v = player.values[c] * player.scale[c];
@@ -618,10 +638,10 @@ class LoadedCwa {
                         v = apply_accel_calibration(v, j, player.temp,
                                                     native_cal);
                     }
-                    acc_row[j] = v;
+                    acc_row[j] = static_cast<T>(v);
                 }
                 for (int j = num_accel; j < 3; ++j) {
-                    acc_row[j] = 0.0;
+                    acc_row[j] = static_cast<T>(0.0);
                 }
 
                 if (gyr_out != nullptr) {
@@ -630,13 +650,14 @@ class LoadedCwa {
                     // default priority).
                     // ref:
                     // vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
-                    double* gyr_row = gyr_out + static_cast<size_t>(sample) * 3;
+                    T* gyr_row = gyr_out + static_cast<size_t>(sample) * 3;
                     for (int j = 0; j < num_gyro && j < 3; ++j) {
                         const int c = channel_map.gyro[static_cast<size_t>(j)];
-                        gyr_row[j] = player.values[c] * player.scale[c];
+                        gyr_row[j] = static_cast<T>(player.values[c] *
+                                                    player.scale[c]);
                     }
                     for (int j = num_gyro; j < 3; ++j) {
-                        gyr_row[j] = 0.0;
+                        gyr_row[j] = static_cast<T>(0.0);
                     }
                 }
             }
@@ -687,7 +708,8 @@ py::dict process_cwa_native(
     double sample_rate_hz = omcwa_defaults::kDefaultSampleRateHz,
     bool calibrate = omcwa_defaults::kDefaultCalibrate,
     int interpolate = omcwa_defaults::kDefaultInterpolate,
-    double stationary_time = omcwa_defaults::kDefaultStationaryTime) {
+    double stationary_time = omcwa_defaults::kDefaultStationaryTime,
+    bool as_float32 = omcwa_defaults::kDefaultAsFloat32) {
     LoadedCwa loaded = LoadedCwa::load(path);
     Calibration calibration;
     if (calibrate) {
@@ -696,7 +718,9 @@ py::dict process_cwa_native(
     } else {
         calibration = identity_calibration();
     }
-    py::dict out = loaded.resample(calibration, sample_rate_hz, interpolate);
+    py::dict out = loaded.resample(calibration, sample_rate_hz, interpolate,
+                                   /*with_temp=*/true, /*with_time=*/true,
+                                   as_float32);
     out["calibration"] = calibration;
     return out;
 }
@@ -789,6 +813,7 @@ PYBIND11_MODULE(_native, m) {
              py::arg("sample_rate_hz") = omcwa_defaults::kUseFileSampleRate,
              py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
              py::arg("with_temp") = true, py::arg("with_time") = true,
+             py::arg("as_float32") = omcwa_defaults::kDefaultAsFloat32,
              R"doc(
                 Resample to a uniform rate using om_convert_player_t.
 
@@ -802,6 +827,10 @@ PYBIND11_MODULE(_native, m) {
                     it, 8 bytes per sample. The caller can rebuild the
                     uniform grid from start_time and sample_rate_hz.
                     "time" is then None in the result.
+                as_float32: store acc and gyr as float32 instead of
+                    float64, halving their footprint. Calibration still runs
+                    in float64, and only the store narrows. time keeps
+                    float64 regardless of this flag.
                 Accel is calibrated. Gyro is scaled only.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
             )doc");
@@ -814,6 +843,7 @@ PYBIND11_MODULE(_native, m) {
           py::arg("calibrate") = omcwa_defaults::kDefaultCalibrate,
           py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
           py::arg("stationary_time") = omcwa_defaults::kDefaultStationaryTime,
+          py::arg("as_float32") = omcwa_defaults::kDefaultAsFloat32,
           R"doc(
             One-shot load, calibrate, and resample.
 

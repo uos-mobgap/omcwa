@@ -23,3 +23,8 @@ DEFAULT_SAMPLE_RATE_HZ = USE_FILE_SAMPLE_RATE
 DEFAULT_INTERPOLATE = InterpolateMode.CUBIC
 DEFAULT_STATIONARY_TIME = 10.0
 DEFAULT_CALIBRATE = True
+
+# float64 output matches every consumer today. float32 halves acc/gyr, but
+# needs verification downstream before it becomes the default.
+DEFAULT_DTYPE = "float64"
+

@@ -72,15 +72,17 @@ class Calibration:
 class UniformRecording:
     """Uncalibrated IMU samples on a uniform grid at the file default rate.
 
-    Arrays are float64, accelerometer in g and gyroscope in dps.
-    Calibration is identity.
+    Accelerometer values are in g and gyroscope values are in dps.
+    Calibration is identity. ``acc`` and ``gyr`` are float64 unless
+    ``load_cwa`` was called with ``dtype="float32"``. ``temp`` and ``time``
+    are float64 regardless.
     """
 
     sample_rate_hz: float
     start_time: float
     n_samples: int
-    acc: npt.NDArray[np.float64]
-    gyr: npt.NDArray[np.float64] | None
+    acc: npt.NDArray[np.floating]
+    gyr: npt.NDArray[np.floating] | None
     temp: npt.NDArray[np.float64]
     metadata: dict[str, Any]
     path: str
@@ -114,14 +116,16 @@ class UniformRecording:
 class ProcessedRecording:
     """Uniformly resampled IMU streams.
 
-    Temperature is not retained on this type.
+    Temperature is not retained on this type. ``acc`` and ``gyr`` are
+    float64 unless ``process_cwa`` was called with ``dtype="float32"``.
+    ``time`` is float64 regardless.
     """
 
     sample_rate_hz: float
     start_time: float
     n_samples: int
-    acc: npt.NDArray[np.float64]
-    gyr: npt.NDArray[np.float64] | None
+    acc: npt.NDArray[np.floating]
+    gyr: npt.NDArray[np.floating] | None
     calibration: Calibration
     metadata: dict[str, Any]
     valid: npt.NDArray[np.bool_]
