@@ -1,7 +1,7 @@
 # Vendoring omconvert
 
 `native/vendored/omconvert/` is OpenMovement omconvert at the commit recorded
-in `OMCONVERT_VERSION`, plus two local performance changes. The exact delta
+in `OMCONVERT_VERSION`, plus three local changes. The exact delta
 against unmodified upstream:
 
 ```bash
@@ -22,10 +22,10 @@ It is the live delta, not a replay script you have to keep in sync by hand.
 
 ## Local changes
 
-Both changes are performance-only. Neither changes numerical output. The
-golden-fixture tests in `tests/test_process_parity.py` pass unchanged, and both
-were A/B tested on a 931.5 MB AX6 recording with byte-identical results for
-`time`, `acc`, `gyr`, `valid`, `clipped`, and all calibration coefficients.
+The first two changes are performance-only and leave numerical output
+unchanged. The AX6 calibration fix changes coefficients because it replaces an
+interpolated scan with the existing direct-data algorithm. The old player scan
+remains selectable for compatibility.
 
 ### Replace `timegm()` in `omdata.c`
 
@@ -66,7 +66,21 @@ boundaries `idx[]` contains clamped duplicates. There the original full
 fetch runs and the cache is invalidated. It is also invalidated when the
 interpolator advances to a new segment.
 
-Both changes are candidates for upstreaming to
+### Read AX6 calibration temperature from its fixed sector bytes
+
+`OmCalibrateFindStationaryPointsFromData()` used the accelerometer payload
+offset as a proxy for temperature availability. That works on AX3, where the
+accelerometer payload starts at byte 30. AX6 stores gyroscope axes first, so
+its accelerometer payload starts at byte 36. Temperature remains at byte 20
+for both devices.
+
+The patch reads temperature from byte 20 for every CWA sector and lets AX6 use
+the direct-data path. This removes a full interpolating-player pass during
+calibration. Omconvert's existing `-calibrate 2` setting still forces the
+player path. The Python API exposes the same choice as
+`calibration_source="player"`.
+
+All three changes are candidates for upstreaming to
 https://github.com/openmovementproject/openmovement. If they land upstream,
 the corresponding delta here disappears on the next merge from
 `vendor/omconvert`.
@@ -86,11 +100,12 @@ subset that has not landed upstream.
 
 ## What belongs in the vendored tree
 
-| tier | what                                    | where it lives             | flag                      |
-| ---- | --------------------------------------- | -------------------------- | ------------------------- |
-| A    | performance only, byte identical output | `native/vendored/`         | none, always on           |
-| B    | changes numbers                         | `native/` outside vendored | runtime flag, default off |
-| C    | new algorithms                          | `native/` or `src/omcwa/`  | runtime flag              |
+| tier | what                                      | where it lives            | compatibility             |
+| ---- | ----------------------------------------- | ------------------------- | ------------------------- |
+| A    | performance only, byte-identical output   | `native/vendored/`        | none needed               |
+| B    | focused upstream fix that changes numbers | `native/vendored/`        | keep old path selectable  |
+| C    | new algorithm                             | `native/` or `src/omcwa/` | runtime option            |
 
-The two local changes above are tier A. Anything that changes numbers or adds
-an algorithm belongs outside `native/vendored/`, on omconvert's public API.
+The timestamp and interpolator changes are tier A. The AX6 calibration fix is
+tier B. It patches the existing algorithm rather than maintaining a second
+copy, while the player option preserves the old result when needed.
