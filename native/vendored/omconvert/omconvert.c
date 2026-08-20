@@ -482,7 +482,6 @@ void InterpolatorSeek(interpolator_t *interpolator, double t)
 		interpolator->previousSegmentSamples += interpolator->seg->description.numSamples;
 		interpolator->seg = interpolator->seg->segmentNext;
 		interpolator->timeIndex = -1;
-		interpolator->cacheValid = false;	// [omcwa-patch] window is segment-local
 		if (interpolator->seg != NULL)
 		{
 			interpolator->scale = interpolator->seg->description.scaling;
@@ -567,48 +566,12 @@ void InterpolatorSeek(interpolator_t *interpolator, double t)
 
 
 			// For each index (-1, 0, 1, 2), cache the underlying values (for the interpolator to work over)
-			// [omcwa-patch] Reuse the overlap with the previous seek instead of
-			// re-decoding all four rows. Seeks advance forwards, so a window
-			// starting 'shift' samples later shares (4 - shift) already-decoded
-			// rows. Only applies to a strictly contiguous window: near segment
-			// ends idx[] contains duplicates, and there the original full fetch
-			// is used and the cache is invalidated.
 			int z;
-			const int cacheBase = idx[0];
-			const bool contiguous = (idx[1] == cacheBase + 1 && idx[2] == cacheBase + 2 && idx[3] == cacheBase + 3);
-			int shift = -1;
-			if (contiguous && interpolator->cacheValid && interpolator->cacheSeg == interpolator->seg)
+			for (z = 0; z < 4; z++)
 			{
-				const int delta = cacheBase - interpolator->cacheBase;
-				if (delta >= 0 && delta < 4) { shift = delta; }
+				char clipped = OmDataGetValues(interpolator->data, interpolator->seg, idx[z], interpolator->values[z]);
+				if (z == 1 || z == 2) { interpolator->clipped |= clipped; }
 			}
-
-			if (shift >= 0)
-			{
-				for (z = 0; z + shift < 4; z++)
-				{
-					memcpy(interpolator->values[z], interpolator->values[z + shift], sizeof(interpolator->values[0]));
-					interpolator->cacheClipped[z] = interpolator->cacheClipped[z + shift];
-				}
-				for (z = 4 - shift; z < 4; z++)
-				{
-					interpolator->cacheClipped[z] = OmDataGetValues(interpolator->data, interpolator->seg, idx[z], interpolator->values[z]);
-				}
-				interpolator->cacheBase = cacheBase;
-			}
-			else
-			{
-				for (z = 0; z < 4; z++)
-				{
-					interpolator->cacheClipped[z] = OmDataGetValues(interpolator->data, interpolator->seg, idx[z], interpolator->values[z]);
-				}
-				interpolator->cacheValid = contiguous;
-				interpolator->cacheBase = cacheBase;
-				interpolator->cacheSeg = interpolator->seg;
-			}
-
-			// Unchanged semantics: only the two bracketing samples set clipped.
-			interpolator->clipped |= (interpolator->cacheClipped[1] | interpolator->cacheClipped[2]);
 
 			return;
 		}
