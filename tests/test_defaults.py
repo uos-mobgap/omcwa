@@ -13,6 +13,7 @@ import pytest
 from omcwa import CalibrationError, _native, load_cwa, process_cwa
 from omcwa.defaults import (
     DEFAULT_CALIBRATE,
+    DEFAULT_CALIBRATION_SOURCE,
     DEFAULT_DTYPE,
     DEFAULT_INTERPOLATE,
     DEFAULT_SAMPLE_RATE_HZ,
@@ -147,6 +148,7 @@ def test_default_constants() -> None:
     assert int(DEFAULT_INTERPOLATE) == 3
     assert DEFAULT_STATIONARY_TIME == 10.0
     assert DEFAULT_CALIBRATE is True
+    assert DEFAULT_CALIBRATION_SOURCE == "data"
     assert DEFAULT_DTYPE == "float64"
 
 
@@ -159,7 +161,9 @@ def test_python_defaults_match_cpp_header() -> None:
     assert _cpp_int("kDefaultInterpolate") == int(DEFAULT_INTERPOLATE)
     assert _cpp_float("kDefaultStationaryTime") == DEFAULT_STATIONARY_TIME
     assert _cpp_constexpr("kDefaultCalibrate") == "true"
+    assert _cpp_constexpr("kDefaultCalibrateFromData") == "true"
     assert _cpp_constexpr("kDefaultAsFloat32") == "false"
+
 
 def test_process_forwards_defaults_and_loads_once(
     monkeypatch: pytest.MonkeyPatch,
@@ -174,6 +178,7 @@ def test_process_forwards_defaults_and_loads_once(
             "sample_rate_hz": DEFAULT_SAMPLE_RATE_HZ,
             "interpolate": int(DEFAULT_INTERPOLATE),
             "stationary_time": DEFAULT_STATIONARY_TIME,
+            "calibrate_from_data": True,
         }
     ]
     assert len(calls["resample"]) == 1
@@ -206,6 +211,21 @@ def test_process_forwards_dtype(
 
     _, resample_options = calls["resample"][0]
     assert resample_options["as_float32"] is True
+
+
+def test_process_forwards_player_calibration_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _native_spy(monkeypatch)
+
+    process_cwa("recording.cwa", calibration_source="player")
+
+    assert calls["auto_calibrate"][0]["calibrate_from_data"] is False
+
+
+def test_process_rejects_invalid_calibration_source() -> None:
+    with pytest.raises(ValueError, match="calibration_source must be"):
+        process_cwa("recording.cwa", calibration_source="bogus")
 
 
 def test_process_rejects_invalid_dtype() -> None:
