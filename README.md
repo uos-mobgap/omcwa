@@ -62,10 +62,16 @@ recording = process_cwa(
     calibrate=True,
     interpolate=InterpolateMode.CUBIC,
     stationary_time=10.0,
-    on_calibration_failure="raise",
+    calibration_source="data",        # "player" keeps the omconvert's original AX6 path
+    on_calibration_failure="raise",   # "identity" keeps the omconvert's original bahaviour
     time_range=None,
 )
 ```
+
+The default `"data"` source scans raw CWA sectors for stationary windows.
+This is the original omconvert data path, patched to read AX6 temperature from
+its fixed sector bytes. It avoids a full interpolating-player pass. Use
+`calibration_source="player"` to reproduce the old AX6 calibration path.
 
 `time_range=(start, stop)` is a half-open interval in Unix seconds,
 `start <= time < stop`. Calibration and resampling still run on the full
