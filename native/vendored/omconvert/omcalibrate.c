@@ -244,9 +244,11 @@ static omcalibrate_stationary_points_t *OmCalibrateFindStationaryPoints(omcalibr
 
 			// Get temperature
 			temp = 0;
-			if (dataSegment->description.offset == 30)
+			const unsigned char *p = (const unsigned char *)data->buffer + (OMDATA_SECTOR_SIZE * sectorIndex);
+			// CWA temperature is fixed at byte 20.  AX6 moves the accelerometer
+			// payload from byte 30 to byte 36, but not this side channel.
+			if (p[1] == 'X')
 			{
-				const unsigned char *p = (const unsigned char *)data->buffer + (OMDATA_SECTOR_SIZE * sectorIndex);
 				int16_t inttemp = p[20] | ((int16_t)p[21] << 8);		// @20 WORD Temperature
 				// Convert
 				temp = ((int)inttemp * 150 - 20500) / 1000.0;

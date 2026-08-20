@@ -1195,11 +1195,19 @@ int OmConvertRunConvert(omconvert_settings_t *settings, calc_t *calc)
 			doneCalibration = true;
 
 			// Find stationary points
-			// - If this is a CWA file with co-located temperature and accelerometer readings, use the data directly,
-			// - otherwise, use a 'player' to interpolate over the data.
+			// - By default, read accelerometer and fixed-offset CWA temperature directly from the data.
+			// - A calibrate value of 2 preserves the interpolating player path.
 			omcalibrate_stationary_points_t *stationaryPoints;
 			bool calibrateFromData = (settings->calibrate != 0 && settings->calibrate != 2);
-			if (calibrateFromData && (!omdata.stream['a'].inUse || omdata.stream['a'].segmentFirst->description.offset != 30))
+			bool cwaDataAvailable = false;
+			omdata_segment_t *accelSegment = omdata.stream['a'].segmentFirst;
+			if (omdata.stream['a'].inUse && accelSegment != NULL && accelSegment->sectorCount > 0)
+			{
+				int sectorIndex = accelSegment->sectorIndex[0];
+				const unsigned char *p = (const unsigned char *)omdata.buffer + (OMDATA_SECTOR_SIZE * sectorIndex);
+				cwaDataAvailable = (p[1] == 'X');
+			}
+			if (calibrateFromData && !cwaDataAvailable)
 			{
 				calibrateFromData = false;
 				fprintf(stderr, "NOTE: Calibration requested directly from data, but an interpolator must be used instead.\n");
