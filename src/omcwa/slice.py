@@ -64,7 +64,7 @@ def _sample_bounds(
                 rate=recording.sample_rate_hz,
             ),
         )
-    
+
     last = recording.n_samples
     if stop is not None:
         last = min(
@@ -75,7 +75,7 @@ def _sample_bounds(
                 rate=recording.sample_rate_hz,
             ),
         )
-    
+
     return first, last
 
 
