@@ -11,6 +11,7 @@ import numpy as np
 from omcwa import _native
 from omcwa.defaults import (
     DEFAULT_CALIBRATE,
+    DEFAULT_CALIBRATION_SOURCE,
     DEFAULT_DTYPE,
     DEFAULT_INTERPOLATE,
     DEFAULT_SAMPLE_RATE_HZ,
@@ -26,6 +27,7 @@ from omcwa.types import (
 )
 
 CalibrationFailurePolicy = Literal["raise", "identity"]
+CalibrationSource = Literal["data", "player"]
 Dtype = Literal["float64", "float32"]
 
 
@@ -67,6 +69,13 @@ def _validate_dtype(dtype: str) -> Dtype:
         msg = f"dtype must be 'float64' or 'float32', got {dtype!r}"
         raise ValueError(msg)
     return dtype
+
+
+def _validate_calibration_source(source: str) -> CalibrationSource:
+    if source not in {"data", "player"}:
+        msg = f"calibration_source must be 'data' or 'player', got {source!r}"
+        raise ValueError(msg)
+    return source
 
 
 def _public_metadata(
@@ -154,13 +163,16 @@ def process_cwa(
     calibrate: bool = DEFAULT_CALIBRATE,
     interpolate: int = int(DEFAULT_INTERPOLATE),
     stationary_time: float = DEFAULT_STATIONARY_TIME,
+    calibration_source: CalibrationSource = DEFAULT_CALIBRATION_SOURCE,
     on_calibration_failure: CalibrationFailurePolicy = "raise",
     time_range: tuple[float, float] | None = None,
     dtype: Dtype = DEFAULT_DTYPE,
 ) -> ProcessedRecording:
     """Auto-calibrate and resample a CWA recording with vendored omconvert.
 
-    Auto-calibration uses the first session. Calibration failure raises
+    Auto-calibration uses the first session. ``calibration_source="data"``
+    reads AX3 and AX6 sectors directly. ``"player"`` preserves omconvert's
+    interpolating player path. Calibration failure raises
     :class:`CalibrationError` before output arrays are allocated. Set
     ``on_calibration_failure="identity"`` to keep omconvert's identity
     fallback, or set ``calibrate=False`` to skip fitting.
@@ -175,6 +187,7 @@ def process_cwa(
     downstream pipeline before switching its default.
     """
     failure_policy = _validate_failure_policy(on_calibration_failure)
+    source = _validate_calibration_source(calibration_source)
     output_dtype = _validate_dtype(dtype)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
@@ -184,6 +197,7 @@ def process_cwa(
             sample_rate_hz=sample_rate_hz,
             interpolate=int(interpolate),
             stationary_time=stationary_time,
+            calibrate_from_data=source == "data",
         )
     else:
         native_calibration = _native.identity_calibration()
