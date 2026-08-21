@@ -293,6 +293,31 @@ static double OmDataSampleRate(const void *buffer, char streamIndex, double *out
 
 
 
+// [omcwa-patch] Local replacement for timegm().
+// OmDataTimestamp() is called once per sector per stream, so a 1 GB file makes
+// several million calls. Both glibc's and Apple's timegm() take a timezone
+// lock and re-check the TZ database on every call; on macOS that measures at
+// ~3050 ns/call, which dominates OmDataLoad(). CWA timestamps are always UTC
+// civil time with no DST and no leap seconds, so the full timegm() machinery
+// is not needed. This is the standard days-from-civil algorithm (Howard
+// Hinnant, public domain), measured at ~2 ns/call.
+// See native/VENDORING.md.
+static int64_t OmCwaDaysFromCivil(int y, unsigned m, unsigned d)
+{
+	y -= m <= 2;
+	const int64_t era = (y >= 0 ? y : y - 399) / 400;
+	const unsigned yoe = (unsigned)(y - era * 400);					// [0, 399]
+	const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;	// [0, 365]
+	const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;		// [0, 146096]
+	return era * 146097 + (int64_t)doe - 719468;
+}
+
+static time_t OmCwaTimeGm(const struct tm *t)
+{
+	return (time_t)(OmCwaDaysFromCivil(t->tm_year + 1900, (unsigned)(t->tm_mon + 1), (unsigned)t->tm_mday) * 86400
+		+ t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec);
+}
+
 static uint32_t OmDataTimestamp(uint32_t timestamp)
 {
 	time_t tSec;								// Seconds since epoch
@@ -318,7 +343,7 @@ static uint32_t OmDataTimestamp(uint32_t timestamp)
 		tParts.tm_hour = DATETIME_HOURS(timestamp);
 		tParts.tm_min = DATETIME_MINUTES(timestamp);
 		tParts.tm_sec = DATETIME_SECONDS(timestamp);
-		tSec = timegm(&tParts);						// Pack from YMDHMS
+		tSec = OmCwaTimeGm(&tParts);				// [omcwa-patch] was timegm()
 	}
 	return (uint32_t)tSec;
 }

@@ -142,6 +142,15 @@ typedef struct
 	bool valid;
 	double scale;			// segment with the smallest scale will be ~1/range (range will be next largest integer)
 	int maxRange;			// segment with the largest range ~1/scale (will be next largest integer)
+
+	// [omcwa-patch] Sliding-window cache for the four neighbouring samples.
+	// InterpolatorSeek() re-fetched all four on every output sample; when
+	// seeking forwards in small steps most of them were just decoded.
+	// See native/VENDORING.md.
+	omdata_segment_t *cacheSeg;		// segment the cached window belongs to
+	int cacheBase;					// source sample index held in values[0]
+	char cacheClipped[4];			// per-row clip flag, parallel to values[]
+	bool cacheValid;				// false until a contiguous window is cached
 } interpolator_t;
 
 

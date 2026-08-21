@@ -1,7 +1,6 @@
-// pybind11 adapter over vendored omconvert: mirrors OmConvertRunConvert but
-// writes numpy buffers instead of WAV/CSV files.
-// Also exposes stage primitives (load, calibrate, resample) for Python
-// injection.
+// pybind11 adapter over vendored omconvert. Mirrors OmConvertRunConvert but
+// writes numpy buffers instead of WAV/CSV files. Python can also call load,
+// calibrate, and resample as separate stages.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1049
 
 #include <cstdio>
@@ -123,6 +122,40 @@ py::array_t<double> vec3_from_calibration(const double src[OMCALIBRATE_AXES]) {
     return arr;
 }
 
+// omcwa-only diagnostics from the stationary points that fed
+// OmCalibrateFindAutoCalibration. axis_min/max copy its internal per-axis
+// scan, so callers can tell error codes -1 through -4 apart without
+// re-running the fit. Range scan is omcalibrate.c:632-672.
+// Computed against the fitted calibration, before any identity fallback, so
+// mean_svm_error still reflects the fit that was attempted.
+// ref: vendored/omconvert/omcalibrate.c:OmCalibrateFindAutoCalibration:646
+struct CalibrationDiagnostics {
+    int num_stationary_points = 0;
+    double axis_min[OMCALIBRATE_AXES] = {0, 0, 0};
+    double axis_max[OMCALIBRATE_AXES] = {0, 0, 0};
+    double mean_svm_error = 0.0;
+};
+
+CalibrationDiagnostics
+compute_calibration_diagnostics(omcalibrate_calibration_t& native,
+                                omcalibrate_stationary_points_t* points) {
+    CalibrationDiagnostics diag;
+    diag.num_stationary_points = points->numValues;
+    for (int c = 0; c < OMCALIBRATE_AXES; ++c) {
+        for (int i = 0; i < points->numValues; ++i) {
+            const double v = points->values[i].mean[c];
+            if (i == 0 || v < diag.axis_min[c]) {
+                diag.axis_min[c] = v;
+            }
+            if (i == 0 || v > diag.axis_max[c]) {
+                diag.axis_max[c] = v;
+            }
+        }
+    }
+    diag.mean_svm_error = OmCalibrateMeanSvmError(&native, points);
+    return diag;
+}
+
 // Return only the first session. omconvert skips session 2 and later.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1146
 omdata_session_t* first_session(omdata_t* data) {
@@ -141,19 +174,23 @@ void find_arrangement(om_convert_arrangement_t* arrangement, omdata_t* data,
     }
 }
 
-// Choose stationary-point source for auto-calibration: raw CWA sectors when
-// accel and temp are co-located (offset 30), else the interpolating player.
+// Direct stationary-point detection needs an accelerometer segment. CWA
+// temperature lives at a fixed sector offset on both AX3 and AX6.
 // sample_rate_hz <= 0 uses arrangement.defaultRate via
 // OmConvertPlayerInitialize.
 // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1165
-bool prefer_calibrate_from_data(const omdata_t& data) {
+bool can_calibrate_from_data(const omdata_t& data) {
     if (!data.stream['a'].inUse) {
         return false;
     }
-    if (data.stream['a'].segmentFirst == nullptr) {
+    const omdata_segment_t* segment = data.stream['a'].segmentFirst;
+    if (segment == nullptr || segment->sectorCount <= 0 ||
+        data.buffer == nullptr) {
         return false;
     }
-    return data.stream['a'].segmentFirst->description.offset == 30;
+    const int sector_index = static_cast<int>(segment->sectorIndex[0]);
+    const unsigned char* p = data.buffer + (OMDATA_SECTOR_SIZE * sector_index);
+    return p[1] == 'X';
 }
 
 // Apply omconvert accel calibration (scale, offset, temperature correction).
@@ -173,8 +210,9 @@ struct ChannelMap {
     std::vector<int> gyro;
 };
 
-py::array_t<double> make_2d_array(py::ssize_t rows, py::ssize_t cols) {
-    return py::array_t<double>(std::vector<py::ssize_t>{rows, cols});
+template <typename T>
+py::array_t<T> make_2d_array(py::ssize_t rows, py::ssize_t cols) {
+    return py::array_t<T>(std::vector<py::ssize_t>{rows, cols});
 }
 
 // Map player channel indices to logical accel/gyro axes for numpy (n, 3)
@@ -209,6 +247,14 @@ class Calibration {
     int num_axes = 0;
     bool success = true;
 
+    // omcwa-only diagnostics, not part of omcalibrate_calibration_t. Left at
+    // these zero defaults except by auto_calibrate(), which overwrites them
+    // once the stationary points are known.
+    int num_stationary_points = 0;
+    py::array_t<double> axis_min;
+    py::array_t<double> axis_max;
+    double mean_svm_error = 0.0;
+
     static Calibration from_native(const omcalibrate_calibration_t& native) {
         Calibration out;
         out.scale = vec3_from_calibration(native.scale);
@@ -218,6 +264,11 @@ class Calibration {
         out.error_code = native.errorCode;
         out.num_axes = native.numAxes;
         out.success = native.errorCode == 0;
+
+        const double zero[OMCALIBRATE_AXES] = {0, 0, 0};
+        out.axis_min = vec3_from_calibration(zero);
+        out.axis_max = vec3_from_calibration(zero);
+
         return out;
     }
 
@@ -239,15 +290,22 @@ class Calibration {
     }
 };
 
-// Owns a loaded omdata_t for the object lifetime (OmDataLoad on load,
-// OmDataFree on destruction). Copy is disabled. move transfers ownership.
+// Owns a loaded omdata_t for the object lifetime. OmDataLoad on load,
+// OmDataFree on destruction. Copy is disabled. Move transfers ownership.
 class LoadedCwa {
   public:
     static LoadedCwa load(const std::string& path) {
         QuietNativeIo quiet;
         LoadedCwa loaded;
         std::memset(&loaded.data_, 0, sizeof(loaded.data_));
-        if (!OmDataLoad(&loaded.data_, path.c_str())) {
+        bool ok = false;
+        {
+            // OmDataLoad touches no Python state and runs for tens of seconds
+            // on large files. Release the GIL so other threads keep running.
+            py::gil_scoped_release unlock;
+            ok = OmDataLoad(&loaded.data_, path.c_str()) != 0;
+        }
+        if (!ok) {
             throw std::runtime_error("failed to load CWA file: " + path);
         }
         loaded.loaded_ = true;
@@ -355,7 +413,9 @@ class LoadedCwa {
     Calibration auto_calibrate(
         double sample_rate_hz = omcwa_defaults::kUseFileSampleRate,
         int interpolate = omcwa_defaults::kDefaultInterpolate,
-        double stationary_time = omcwa_defaults::kDefaultStationaryTime) const {
+        double stationary_time = omcwa_defaults::kDefaultStationaryTime,
+        bool calibrate_from_data =
+            omcwa_defaults::kDefaultCalibrateFromData) const {
         QuietNativeIo quiet;
         omdata_session_t* session =
             first_session(const_cast<omdata_t*>(&data_));
@@ -374,27 +434,40 @@ class LoadedCwa {
         OmCalibrateInit(&native);
 
         omcalibrate_stationary_points_t* stationary_points = nullptr;
+        int calibration_result = 0;
 
-        if (prefer_calibrate_from_data(data_)) {
-            stationary_points = OmCalibrateFindStationaryPointsFromData(
-                &config, const_cast<omdata_t*>(&data_));
-        } else {
-            om_convert_player_t player = {};
-            // sample_rate_hz <= 0 uses arrangement.defaultRate inside
-            // OmConvertPlayerInitialize.
-            // ref: vendored/omconvert/omconvert.c:OmConvertPlayerInitialize:747
-            OmConvertPlayerInitialize(&player, &arrangement, sample_rate_hz,
-                                      static_cast<char>(interpolate));
-            stationary_points =
-                OmCalibrateFindStationaryPointsFromPlayer(&config, &player);
+        {
+            // Whole-recording scan plus regression fit, all in C.
+            py::gil_scoped_release unlock;
+
+            if (calibrate_from_data && can_calibrate_from_data(data_)) {
+                stationary_points = OmCalibrateFindStationaryPointsFromData(
+                    &config, const_cast<omdata_t*>(&data_));
+            } else {
+                om_convert_player_t player = {};
+                // sample_rate_hz <= 0 uses arrangement.defaultRate inside
+                // OmConvertPlayerInitialize.
+                // ref:
+                // vendored/omconvert/omconvert.c:OmConvertPlayerInitialize:747
+                OmConvertPlayerInitialize(&player, &arrangement, sample_rate_hz,
+                                          static_cast<char>(interpolate));
+                stationary_points =
+                    OmCalibrateFindStationaryPointsFromPlayer(&config, &player);
+            }
+
+            if (stationary_points != nullptr) {
+                calibration_result = OmCalibrateFindAutoCalibration(
+                    &config, stationary_points, &native);
+            }
         }
 
         if (stationary_points == nullptr) {
             throw std::runtime_error("failed to find stationary points");
         }
 
-        const int calibration_result =
-            OmCalibrateFindAutoCalibration(&config, stationary_points, &native);
+        const CalibrationDiagnostics diagnostics =
+            compute_calibration_diagnostics(native, stationary_points);
+
         // On auto-calibration failure, omconvert resets to identity calibration
         // but preserves errorCode and numAxes. OmCalibrateInit here matches
         // OmCalibrateCopy with a null defaultCalibration.
@@ -408,7 +481,14 @@ class LoadedCwa {
         }
 
         OmCalibrateFreeStationaryPoints(stationary_points);
-        return Calibration::from_native(native);
+
+        Calibration out = Calibration::from_native(native);
+        out.num_stationary_points = diagnostics.num_stationary_points;
+        out.axis_min = vec3_from_calibration(diagnostics.axis_min);
+        out.axis_max = vec3_from_calibration(diagnostics.axis_max);
+        out.mean_svm_error = diagnostics.mean_svm_error;
+
+        return out;
     }
 
     py::array_t<double> apply_calibration(
@@ -440,7 +520,7 @@ class LoadedCwa {
         }
 
         const auto native = calibration.to_native();
-        py::array_t<double> acc_out = make_2d_array(n, 3);
+        py::array_t<double> acc_out = make_2d_array<double>(n, 3);
         auto acc_out_mut = acc_out.mutable_unchecked<2>();
 
         for (py::ssize_t i = 0; i < n; ++i) {
@@ -457,7 +537,26 @@ class LoadedCwa {
     py::dict
     resample(const Calibration& calibration,
              double sample_rate_hz = omcwa_defaults::kUseFileSampleRate,
-             int interpolate = omcwa_defaults::kDefaultInterpolate) const {
+             int interpolate = omcwa_defaults::kDefaultInterpolate,
+             bool with_temp = true, bool with_time = true,
+             bool as_float32 = omcwa_defaults::kDefaultAsFloat32) const {
+        // acc/gyr dominate peak memory, so their width is the caller's
+        // choice. time, temp, valid and clipped stay at their natural width
+        // regardless. time needs float64 precision at unix-epoch magnitude,
+        // and the others are already minimal.
+        if (as_float32) {
+            return resample_impl<float>(calibration, sample_rate_hz,
+                                        interpolate, with_temp, with_time);
+        }
+        return resample_impl<double>(calibration, sample_rate_hz, interpolate,
+                                     with_temp, with_time);
+    }
+
+  private:
+    template <typename T>
+    py::dict resample_impl(const Calibration& calibration,
+                           double sample_rate_hz, int interpolate,
+                           bool with_temp, bool with_time) const {
         QuietNativeIo quiet;
         omdata_session_t* session =
             first_session(const_cast<omdata_t*>(&data_));
@@ -484,71 +583,105 @@ class LoadedCwa {
         const int num_gyro = static_cast<int>(channel_map.gyro.size());
         const auto native_cal = calibration.to_native();
 
-        py::array_t<double> time_arr(num_samples);
-        py::array_t<double> acc_arr = make_2d_array(num_samples, 3);
-        py::array_t<double> temp_arr(num_samples);
+        // Output arrays are sized by num_samples and dominate peak memory
+        // (66 bytes/sample with gyro at T=double). temp and time are 8
+        // bytes each. Allocate them only when the caller wants them. Time
+        // is a uniform grid from start_time and sample_rate_hz, so Python
+        // can rebuild it instead of holding it here.
+        py::array_t<T> acc_arr = make_2d_array<T>(num_samples, 3);
         py::array_t<bool> valid_arr(num_samples);
         py::array_t<bool> clipped_arr(num_samples);
 
-        const bool has_gyro = num_gyro > 0;
-        py::array_t<double> gyr_arr;
-        if (has_gyro) {
-            gyr_arr = make_2d_array(num_samples, 3);
+        py::array_t<double> time_arr;
+        if (with_time) {
+            time_arr = py::array_t<double>(num_samples);
         }
 
-        auto time_mut = time_arr.mutable_unchecked<1>();
-        auto acc_mut = acc_arr.mutable_unchecked<2>();
-        auto temp_mut = temp_arr.mutable_unchecked<1>();
-        auto valid_mut = valid_arr.mutable_unchecked<1>();
-        auto clipped_mut = clipped_arr.mutable_unchecked<1>();
+        py::array_t<double> temp_arr;
+        if (with_temp) {
+            temp_arr = py::array_t<double>(num_samples);
+        }
 
-        for (int sample = 0; sample < num_samples; ++sample) {
-            OmConvertPlayerSeek(&player, sample);
+        const bool has_gyro = num_gyro > 0;
+        py::array_t<T> gyr_arr;
+        if (has_gyro) {
+            gyr_arr = make_2d_array<T>(num_samples, 3);
+        }
 
-            const double t =
-                arrangement.startTime + static_cast<double>(sample) / rate;
-            time_mut(sample) = t;
-            temp_mut(sample) = player.temp;
-            valid_mut(sample) = player.valid != 0;
+        // Raw pointers so the sample loop touches no Python state and can run
+        // with the GIL released.
+        double* time_out = with_time ? time_arr.mutable_data() : nullptr;
+        T* acc_out = acc_arr.mutable_data();
+        bool* valid_out = valid_arr.mutable_data();
+        bool* clipped_out = clipped_arr.mutable_data();
+        double* temp_out = with_temp ? temp_arr.mutable_data() : nullptr;
+        T* gyr_out = has_gyro ? gyr_arr.mutable_data() : nullptr;
 
-            const bool clipped = player.clipped;
-            // Accel: scale raw counts to g, then apply calibration on the first
-            // three accel axes.
-            // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
-            for (int j = 0; j < num_accel && j < 3; ++j) {
-                const int c = channel_map.accel[static_cast<size_t>(j)];
-                double v = player.values[c] * player.scale[c];
-                if (j < OMCALIBRATE_AXES) {
-                    v = apply_accel_calibration(v, j, player.temp, native_cal);
+        {
+            py::gil_scoped_release unlock;
+
+            for (int sample = 0; sample < num_samples; ++sample) {
+                OmConvertPlayerSeek(&player, sample);
+
+                if (time_out != nullptr) {
+                    time_out[sample] = arrangement.startTime +
+                                       static_cast<double>(sample) / rate;
                 }
-                acc_mut(sample, j) = v;
-            }
-            for (int j = num_accel; j < 3; ++j) {
-                acc_mut(sample, j) = 0.0;
-            }
-
-            if (has_gyro) {
-                auto gyr_mut = gyr_arr.mutable_unchecked<2>();
-                // Gyro: scale raw counts only. omconvert calibrates only when
-                // channel index c < OMCALIBRATE_AXES (accel under default
-                // priority).
-                // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
-                for (int j = 0; j < num_gyro && j < 3; ++j) {
-                    const int c = channel_map.gyro[static_cast<size_t>(j)];
-                    gyr_mut(sample, j) = player.values[c] * player.scale[c];
+                valid_out[sample] = player.valid != 0;
+                clipped_out[sample] = player.clipped;
+                if (temp_out != nullptr) {
+                    temp_out[sample] = player.temp;
                 }
-                for (int j = num_gyro; j < 3; ++j) {
-                    gyr_mut(sample, j) = 0.0;
+
+                // Accel: scale raw counts to g, then apply calibration on the
+                // first three accel axes. Calibration runs in double
+                // regardless of T. Only the store narrows.
+                // ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
+                T* acc_row = acc_out + static_cast<size_t>(sample) * 3;
+                for (int j = 0; j < num_accel && j < 3; ++j) {
+                    const int c = channel_map.accel[static_cast<size_t>(j)];
+                    double v = player.values[c] * player.scale[c];
+                    if (j < OMCALIBRATE_AXES) {
+                        v = apply_accel_calibration(v, j, player.temp,
+                                                    native_cal);
+                    }
+                    acc_row[j] = static_cast<T>(v);
+                }
+                for (int j = num_accel; j < 3; ++j) {
+                    acc_row[j] = static_cast<T>(0.0);
+                }
+
+                if (gyr_out != nullptr) {
+                    // Gyro: scale raw counts only. omconvert calibrates only
+                    // when channel index c < OMCALIBRATE_AXES (accel under
+                    // default priority).
+                    // ref:
+                    // vendored/omconvert/omconvert.c:OmConvertRunConvert:1410
+                    T* gyr_row = gyr_out + static_cast<size_t>(sample) * 3;
+                    for (int j = 0; j < num_gyro && j < 3; ++j) {
+                        const int c = channel_map.gyro[static_cast<size_t>(j)];
+                        gyr_row[j] =
+                            static_cast<T>(player.values[c] * player.scale[c]);
+                    }
+                    for (int j = num_gyro; j < 3; ++j) {
+                        gyr_row[j] = static_cast<T>(0.0);
+                    }
                 }
             }
-
-            clipped_mut(sample) = clipped;
         }
 
         py::dict out;
-        out["time"] = time_arr;
+        if (with_time) {
+            out["time"] = time_arr;
+        } else {
+            out["time"] = py::none();
+        }
         out["acc"] = acc_arr;
-        out["temp"] = temp_arr;
+        if (with_temp) {
+            out["temp"] = temp_arr;
+        } else {
+            out["temp"] = py::none();
+        }
         out["valid"] = valid_arr;
         out["clipped"] = clipped_arr;
         out["sample_rate_hz"] = rate;
@@ -575,23 +708,27 @@ Calibration identity_calibration() {
     return Calibration::from_native(native);
 }
 
-// One-shot load, calibrate, and resample. composes LoadedCwa methods.
-// Used by the Python fast path in src/omcwa/process.py.
+// Load, calibrate, and resample in one call. Calls LoadedCwa methods.
+// Used by the Python path in src/omcwa/process.py.
 py::dict process_cwa_native(
     const std::string& path,
     double sample_rate_hz = omcwa_defaults::kDefaultSampleRateHz,
     bool calibrate = omcwa_defaults::kDefaultCalibrate,
     int interpolate = omcwa_defaults::kDefaultInterpolate,
-    double stationary_time = omcwa_defaults::kDefaultStationaryTime) {
+    double stationary_time = omcwa_defaults::kDefaultStationaryTime,
+    bool as_float32 = omcwa_defaults::kDefaultAsFloat32,
+    bool calibrate_from_data = omcwa_defaults::kDefaultCalibrateFromData) {
     LoadedCwa loaded = LoadedCwa::load(path);
     Calibration calibration;
     if (calibrate) {
-        calibration =
-            loaded.auto_calibrate(sample_rate_hz, interpolate, stationary_time);
+        calibration = loaded.auto_calibrate(
+            sample_rate_hz, interpolate, stationary_time, calibrate_from_data);
     } else {
         calibration = identity_calibration();
     }
-    py::dict out = loaded.resample(calibration, sample_rate_hz, interpolate);
+    py::dict out =
+        loaded.resample(calibration, sample_rate_hz, interpolate,
+                        /*with_temp=*/true, /*with_time=*/true, as_float32);
     out["calibration"] = calibration;
     return out;
 }
@@ -626,14 +763,27 @@ PYBIND11_MODULE(_native, m) {
                       "Reference temperature used during calibration.")
         .def_readonly("error_code", &Calibration::error_code,
                       R"doc(
-                0 on success. negative omconvert error code on identity
+                0 on success. Negative omconvert error code on identity
                 fallback.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1196
             )doc")
         .def_readonly("num_axes", &Calibration::num_axes,
                       "Number of axes that contributed to the calibration fit.")
         .def_readonly("success", &Calibration::success,
-                      "True only when error_code == 0.");
+                      "True only when error_code == 0.")
+        .def_readonly("num_stationary_points",
+                      &Calibration::num_stationary_points,
+                      "Stationary points found before the calibration fit. "
+                      "Set only by auto_calibrate().")
+        .def_readonly("axis_min", &Calibration::axis_min,
+                      "Per-axis minimum of the stationary point means, "
+                      "shape (3,). Set only by auto_calibrate().")
+        .def_readonly("axis_max", &Calibration::axis_max,
+                      "Per-axis maximum of the stationary point means, "
+                      "shape (3,). Set only by auto_calibrate().")
+        .def_readonly("mean_svm_error", &Calibration::mean_svm_error,
+                      "Mean absolute deviation of stationary-point SVM from 1 g"
+                      " under this calibration. Set only by auto_calibrate().");
 
     py::class_<LoadedCwa>(
         m, "LoadedCwa",
@@ -647,6 +797,8 @@ PYBIND11_MODULE(_native, m) {
              py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
              py::arg("stationary_time") =
                  omcwa_defaults::kDefaultStationaryTime,
+             py::arg("calibrate_from_data") =
+                 omcwa_defaults::kDefaultCalibrateFromData,
              R"doc(
                 Run omconvert auto-calibration on the full recording.
 
@@ -654,6 +806,8 @@ PYBIND11_MODULE(_native, m) {
                     detection. 0 uses the file default rate.
                 interpolate: 1=nearest, 2=linear, 3=cubic (default is cubic).
                 stationary_time: minimum stationary period in seconds.
+                calibrate_from_data: read raw CWA sectors directly. False
+                    forces omconvert's interpolating player path.
 
                 On failure returns identity calibration with success=False
                 and error_code preserved.
@@ -670,11 +824,25 @@ PYBIND11_MODULE(_native, m) {
         .def("resample", &LoadedCwa::resample, py::arg("calibration"),
              py::arg("sample_rate_hz") = omcwa_defaults::kUseFileSampleRate,
              py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
+             py::arg("with_temp") = true, py::arg("with_time") = true,
+             py::arg("as_float32") = omcwa_defaults::kDefaultAsFloat32,
              R"doc(
                 Resample to a uniform rate using om_convert_player_t.
 
                 sample_rate_hz: 0 uses arrangement.defaultRate.
                 interpolate: 1=nearest, 2=linear, 3=cubic.
+                with_temp: allocate the per-sample temperature array.
+                    False skips it, 8 bytes per sample. Calibration still
+                    uses temperature. Only the output array is skipped, and
+                    "temp" is None in the result.
+                with_time: allocate the per-sample time array. False skips
+                    it, 8 bytes per sample. The caller can rebuild the
+                    uniform grid from start_time and sample_rate_hz.
+                    "time" is then None in the result.
+                as_float32: store acc and gyr as float32 instead of
+                    float64, halving their footprint. Calibration still runs
+                    in float64, and only the store narrows. time keeps
+                    float64 regardless of this flag.
                 Accel is calibrated. Gyro is scaled only.
                 ref: vendored/omconvert/omconvert.c:OmConvertRunConvert:1404
             )doc");
@@ -687,6 +855,9 @@ PYBIND11_MODULE(_native, m) {
           py::arg("calibrate") = omcwa_defaults::kDefaultCalibrate,
           py::arg("interpolate") = omcwa_defaults::kDefaultInterpolate,
           py::arg("stationary_time") = omcwa_defaults::kDefaultStationaryTime,
+          py::arg("as_float32") = omcwa_defaults::kDefaultAsFloat32,
+          py::arg("calibrate_from_data") =
+              omcwa_defaults::kDefaultCalibrateFromData,
           R"doc(
             One-shot load, calibrate, and resample.
 

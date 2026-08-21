@@ -1,15 +1,15 @@
 # omcwa
 
-**omcwa** loads OpenMovement `.cwa` recordings from AX3 and AX6 devices,
-applies omconvert-compatible accelerometer auto-calibration, and resamples to
-uniform NumPy arrays.
+omcwa loads OpenMovement `.cwa` recordings from AX3 and AX6 devices.
+It runs omconvert-compatible accelerometer auto-calibration, then resamples
+to uniform NumPy arrays.
 
-Version 0.1 exposes one fixed CWA-to-NumPy pipeline. It uses the
-vendored OpenMovement C implementation directly through pybind11.
+Version 0.1 has one CWA-to-NumPy pipeline. The vendored OpenMovement C code
+runs behind pybind11.
 
 ## Install
 
-Recommended: [uv](https://docs.astral.sh/uv/)
+Install with [uv](https://docs.astral.sh/uv/).
 
 From a checkout:
 
@@ -19,7 +19,7 @@ cd omcwa
 uv sync
 ```
 
-Published wheels, once available (TODO):
+Wheels are not published yet:
 
 ```bash
 uv add omcwa
@@ -27,7 +27,7 @@ uv add omcwa
 pip install omcwa
 ```
 
-Editable builds require Python 3.11-3.14 and a C++17 toolchain.
+Editable builds need Python 3.11-3.14 and a C++17 toolchain.
 
 ## Quickstart
 
@@ -46,14 +46,12 @@ print(recording.acc.shape)
 print(recording.gyr is not None)
 ```
 
-The default call:
+The default call loads the CWA once and fits omconvert auto-calibration on the
+complete first session. If that fit fails, it raises before allocating
+resampled output. Then it resamples with cubic interpolation at the file
+default rate.
 
-1. loads the CWA once
-2. fits omconvert auto-calibration on the complete first session
-3. raises before allocating resampled output if calibration failed
-4. resamples with cubic interpolation at the file default rate.
-
-All behavior is configured with primitive options:
+Options:
 
 ```python
 from omcwa import InterpolateMode, process_cwa
@@ -63,25 +61,44 @@ recording = process_cwa(
     sample_rate_hz=100.0,             # 0 selects the file rate
     calibrate=True,
     interpolate=InterpolateMode.CUBIC,
-    stationary_time=10.0,
-    on_calibration_failure="raise",
+    stationary_time=10.0,             # window length auto-calibration scans for stillness
+    calibration_source="data",        # "player" reproduces omconvert's original AX6 path
+    on_calibration_failure="raise",   # "identity" keeps omconvert's original behaviour
     time_range=None,
+    dtype="float64",                  # "float32" halves acc/gyr memory
 )
 ```
 
-`time_range=(start, stop)` uses a half-open interval in Unix seconds:
-`start <= time < stop`. Calibration and resampling still process the full
-session - the range trims the completed output.
+## Relationship to omconvert
+
+omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing
+it, and it patches that code where the patches earn their keep.
+`native/VENDORING.md` tracks every local change against the pinned upstream
+commit. Two are performance-only and leave output byte-identical. The third
+is a correctness fix: AX6 sectors put gyroscope axes before the
+accelerometer, which broke `omconvert`'s own proxy for locating calibration
+temperature and forced AX6 through a slower interpolating "player" pass to
+get a usable fit.
+
+The default `calibration_source="data"` reads temperature from its actual
+fixed sector offset and calibrates straight from CWA sectors, for both AX3
+and AX6. It avoids the interpolating-player pass entirely. Pass
+`calibration_source="player"` to reproduce `omconvert`'s original path, or
+`on_calibration_failure="identity"` to reproduce its identity fallback,
+when a downstream pipeline needs `omconvert`'s exact original numbers.
+
+`time_range=(start, stop)` is a half-open interval in Unix seconds,
+`start <= time < stop`. Calibration and resampling still run on the full
+session. The range trims the finished output.
 
 ## Calibration failures
 
-Strict failure is the default. `CalibrationError` is a `RuntimeError` with the
-native omconvert code available as `error.error_code`. The synthetic fixtures
-cover the common `-1` (too few stationary points) and `-2` (no usable axis fit)
+Strict failure is the default. `CalibrationError` is a `RuntimeError`. The
+native omconvert code is on `error.error_code`. The synthetic fixtures cover
+the common `-1` (too few stationary points) and `-2` (no usable axis fit)
 outcomes.
 
-Use identity fallback only when continuing with uncalibrated acceleration is an
-explicit workflow decision:
+If you are going to keep uncalibrated acceleration, pass identity fallback:
 
 ```python
 fallback = process_cwa(
@@ -93,12 +110,11 @@ if not fallback.calibration.success:
     print(fallback.calibration.error_code)
 ```
 
-This matches omconvert/OMGUI's numerical fallback: identity coefficients are
-applied, while `Calibration.success` stays `False` and the failure code is
-preserved.
+That is the omconvert/OMGUI numerical fallback. Identity coefficients go on,
+`Calibration.success` stays `False`, and the failure code is kept.
 
-To skip fitting altogether, use `calibrate=False`. Its returned
-`Calibration` is a successful identity calibration with error code `0`.
+To skip fitting, pass `calibrate=False`. The returned `Calibration` is a
+successful identity calibration with error code `0`.
 
 ## Returned data and units
 
@@ -109,15 +125,20 @@ To skip fitting altogether, use `calibrate=False`. Its returned
 - `gyr`: `float64` angular velocity in degrees per second, or `None`
 - `sample_rate_hz`: the resolved uniform output rate
 - `calibration`: scale, offset, temperature coefficients, reference
-temperature, success flag, and error code
+temperature, success flag, error code, and auto-calibration diagnostics
+(stationary-point count, axis coverage, mean SVM fit error)
 - `valid` and `clipped`: per-sample boolean flags
 - `metadata`: public device and first-session metadata
 
-AX3 recordings normally provide acceleration only. AX6 recordings normally
-provide acceleration and gyroscope data. Auto-calibration corrects the
-accelerometer. Gyroscope values are scaled to physical units.
+`acc` and `gyr` are `float64` unless `dtype="float32"` was passed to
+`process_cwa`; `time` stays `float64` regardless, since it carries the full
+Unix-epoch magnitude.
 
-`load_cwa` materializes a `UniformRecording` at the file rate with identity
+AX3 recordings usually have acceleration only. AX6 recordings usually have
+acceleration and gyroscope. Auto-calibration corrects the accelerometer.
+Gyroscope values are scaled to physical units.
+
+`load_cwa` returns a `UniformRecording` at the file rate with identity
 calibration:
 
 ```python
@@ -128,29 +149,27 @@ print(uniform.acc.shape)
 print(uniform.temp.shape)
 ```
 
-Its `acc` and `gyr` units match `ProcessedRecording`. `temp` is `float64`
-degrees Celsius. Use `slice_recording` from `omcwa.slice` for ad-hoc half-open
-time slices of either public recording type.
+`acc` and `gyr` units match `ProcessedRecording`, including the `dtype`
+argument. `temp` is `float64` degrees Celsius. `slice_recording` in
+`omcwa.slice` cuts half-open time slices of either public recording type.
 
 ## Current limits
 
-- The complete CWA and complete resampled output are materialized in memory.
-- `time_range` trims after processing. It does not reduce decode, calibration,
-resampling, or peak-memory work.
-- Native processing currently selects the first session in a CWA file.
-- Version 0.1 makes no deployment-scale or 1 GB recording readiness claim.  
-Native windowing and chunked output require a separate design and PR.
+- The whole CWA and the whole resampled output sit in memory.
+- `time_range` trims after processing. Decode, calibration, resampling, and
+peak memory still cover the full session.
+- Native processing takes the first session in a CWA file.
+- Do not point 0.1 at 1 GB recordings or a fleet. Native windowing and
+chunked output need their own design and PR.
 
 ## Reproducible tests
 
 Core tests use committed synthetic `omsynth` CWA files under
-`tests/fixtures/golden/`. Reference NPZ and JSON oracles were generated with
-the OpenMovement `omconvert` pipeline. Tests do not download data, invoke
-external binaries, or skip when local recordings are absent.
+`tests/fixtures/golden/`. Reference NPZ and JSON oracles came from the
+OpenMovement `omconvert` pipeline. Tests do not download data, call
+external binaries, or skip when local recordings are missing.
 
-Fixture provenance, waveform definitions, reference decoding, and the opt-in
-regeneration command are documented in
-`[tests/fixtures/README.md](tests/fixtures/README.md)`.
+See [tests/fixtures/README.md](tests/fixtures/README.md).
 
 Run the development gates with:
 
@@ -164,20 +183,22 @@ uv run pytest -q
 
 ## Benchmarks
 
-Runtime is measured with `pytest-benchmark` and peak memory is measured
-alongside it, both against synthetic CWA recordings that are generated on
-demand.
+`pytest-benchmark` times the pipeline. Peak memory is measured on the same
+run. Both use synthetic CWA files generated on demand.
 
 ```bash
 uv sync --group bench
 uv run pytest benchmarks --cwa-hours 10
 ```
 
-The suite is not part of the default `pytest` run. See
-[benchmarks/README.md](benchmarks/README.md) for the options, for how to
-compare two branches, and for how the generated recording is built.
+That suite is not in the default `pytest` run. Details in
+[benchmarks/README.md](benchmarks/README.md).
 
-The showcase notebook uses the committed `cal_success.cwa` fixture:
+## Showcase notebook
+
+`examples/showcase_omcwa.ipynb` walks through calibration, resampling, the
+`data`/`player` calibration-source parity check, and `dtype="float32"`
+memory savings, all on committed synthetic fixtures:
 
 ```bash
 uv sync --group showcase
@@ -186,7 +207,7 @@ uv run jupyter lab examples/showcase_omcwa.ipynb
 
 ## License
 
-**BSD-2-Clause**. See `LICENSE`.
+BSD-2-Clause. See `LICENSE`.
 
-Vendored OpenMovement sources and licenses are documented in
+Vendored OpenMovement sources and licenses are in
 `THIRD_PARTY_NOTICES.md`.

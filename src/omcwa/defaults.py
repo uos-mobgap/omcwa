@@ -18,8 +18,15 @@ class InterpolateMode(IntEnum):
 # ``arrangement.defaultRate``.
 USE_FILE_SAMPLE_RATE = 0.0
 
-# Default ``process_cwa`` / omgui form: auto rate (no explicit resample).
+# Default process_cwa / omgui: sample_rate_hz=0, no explicit resample.
 DEFAULT_SAMPLE_RATE_HZ = USE_FILE_SAMPLE_RATE
 DEFAULT_INTERPOLATE = InterpolateMode.CUBIC
 DEFAULT_STATIONARY_TIME = 10.0
 DEFAULT_CALIBRATE = True
+# Direct CWA sectors avoid a full interpolating-player pass during AX6
+# calibration. The player remains available as a compatibility option.
+DEFAULT_CALIBRATION_SOURCE = "data"
+
+# float64 output matches every consumer today. float32 halves acc/gyr, but
+# needs verification downstream before it becomes the default.
+DEFAULT_DTYPE = "float64"
