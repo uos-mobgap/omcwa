@@ -34,6 +34,7 @@ showcase = [
     "ipykernel>=6.25,<7",
     "jupyter>=1.1",
     "jupytext>=1.19",
+    "matplotlib>=3.9",
 ]
 
 [dependency-groups]
@@ -51,6 +52,7 @@ showcase = [
     "ipykernel>=6.25,<7",
     "jupyter>=1.1",
     "jupytext>=1.19",
+    "matplotlib>=3.9",
 ]
 
 [tool.scikit-build]
