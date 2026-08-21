@@ -61,17 +61,31 @@ recording = process_cwa(
     sample_rate_hz=100.0,             # 0 selects the file rate
     calibrate=True,
     interpolate=InterpolateMode.CUBIC,
-    stationary_time=10.0,
-    calibration_source="data",        # "player" keeps the omconvert's original AX6 path
-    on_calibration_failure="raise",   # "identity" keeps the omconvert's original bahaviour
+    stationary_time=10.0,             # window length auto-calibration scans for stillness
+    calibration_source="data",        # "player" reproduces omconvert's original AX6 path
+    on_calibration_failure="raise",   # "identity" keeps omconvert's original behaviour
     time_range=None,
+    dtype="float64",                  # "float32" halves acc/gyr memory
 )
 ```
 
-The default `"data"` source scans raw CWA sectors for stationary windows.
-This is the original omconvert data path, patched to read AX6 temperature from
-its fixed sector bytes. It avoids a full interpolating-player pass. Use
-`calibration_source="player"` to reproduce the old AX6 calibration path.
+## Relationship to omconvert
+
+omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing
+it, and it patches that code where the patches earn their keep.
+`native/VENDORING.md` tracks every local change against the pinned upstream
+commit. Two are performance-only and leave output byte-identical. The third
+is a correctness fix: AX6 sectors put gyroscope axes before the
+accelerometer, which broke `omconvert`'s own proxy for locating calibration
+temperature and forced AX6 through a slower interpolating "player" pass to
+get a usable fit.
+
+The default `calibration_source="data"` reads temperature from its actual
+fixed sector offset and calibrates straight from CWA sectors, for both AX3
+and AX6. It avoids the interpolating-player pass entirely. Pass
+`calibration_source="player"` to reproduce `omconvert`'s original path, or
+`on_calibration_failure="identity"` to reproduce its identity fallback,
+when a downstream pipeline needs `omconvert`'s exact original numbers.
 
 `time_range=(start, stop)` is a half-open interval in Unix seconds,
 `start <= time < stop`. Calibration and resampling still run on the full
@@ -111,9 +125,14 @@ successful identity calibration with error code `0`.
 - `gyr`: `float64` angular velocity in degrees per second, or `None`
 - `sample_rate_hz`: the resolved uniform output rate
 - `calibration`: scale, offset, temperature coefficients, reference
-temperature, success flag, and error code
+temperature, success flag, error code, and auto-calibration diagnostics
+(stationary-point count, axis coverage, mean SVM fit error)
 - `valid` and `clipped`: per-sample boolean flags
 - `metadata`: public device and first-session metadata
+
+`acc` and `gyr` are `float64` unless `dtype="float32"` was passed to
+`process_cwa`; `time` stays `float64` regardless, since it carries the full
+Unix-epoch magnitude.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have
 acceleration and gyroscope. Auto-calibration corrects the accelerometer.
@@ -130,9 +149,9 @@ print(uniform.acc.shape)
 print(uniform.temp.shape)
 ```
 
-`acc` and `gyr` units match `ProcessedRecording`. `temp` is `float64`
-degrees Celsius. `slice_recording` in `omcwa.slice` cuts half-open time
-slices of either public recording type.
+`acc` and `gyr` units match `ProcessedRecording`, including the `dtype`
+argument. `temp` is `float64` degrees Celsius. `slice_recording` in
+`omcwa.slice` cuts half-open time slices of either public recording type.
 
 ## Current limits
 
@@ -175,8 +194,11 @@ uv run pytest benchmarks --cwa-hours 10
 That suite is not in the default `pytest` run. Details in
 [benchmarks/README.md](benchmarks/README.md).
 
-The notebook at `examples/showcase_omcwa.ipynb` uses the committed
-`cal_success.cwa` fixture:
+## Showcase notebook
+
+`examples/showcase_omcwa.ipynb` walks through calibration, resampling, the
+`data`/`player` calibration-source parity check, and `dtype="float32"`
+memory savings, all on committed synthetic fixtures:
 
 ```bash
 uv sync --group showcase
