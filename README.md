@@ -19,15 +19,23 @@ cd omcwa
 uv sync
 ```
 
-Wheels are not published yet:
+omcwa is not on PyPI yet. Prebuilt wheels for Linux (x86_64, aarch64), macOS
+(arm64), and Windows (amd64, arm64), Python 3.11-3.14, are attached to each
+[GitHub release](https://github.com/uos-mobgap/omcwa/releases). Download the
+wheel matching your platform and interpreter, then:
 
 ```bash
-uv add omcwa
-# or
-pip install omcwa
+uv add ./omcwa-<version>-<tag>.whl
 ```
 
-Editable builds need Python 3.11-3.14 and a C++17 toolchain.
+or
+
+```bash
+pip install omcwa-<version>-<tag>.whl
+```
+
+
+Editable builds from a checkout need Python 3.11-3.14 and a C++17 toolchain.
 
 ## Quickstart
 

@@ -21,10 +21,15 @@ runs:
         CIBW_TEST_REQUIRES: "numpy"
         CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
 
-    # TODO: attach wheels to the github release and/or upload to pypi.
-    # these are workflow artifacts only.
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
         path: ./wheelhouse/*.whl
         if-no-files-found: error
+
+    - name: Attach wheels to release
+      if: github.event_name == 'release'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release upload "${{ github.event.release.tag_name }}" ./wheelhouse/*.whl --clobber --repo "${{ github.repository }}"
