@@ -215,7 +215,8 @@ uv run jupyter lab examples/showcase_omcwa.ipynb
 
 ## License
 
-BSD-2-Clause. See `LICENSE`.
+omcwa's own code is BSD-2-Clause, copyright The University of Sheffield.
+See `LICENSE`.
 
-Vendored OpenMovement sources and licenses are in
-`THIRD_PARTY_NOTICES.md`.
+Vendored OpenMovement sources keep their own copyright and license. See
+`THIRD_PARTY_NOTICES.md` and `native/vendored/omconvert/LICENSE`.
