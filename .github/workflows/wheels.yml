@@ -5,57 +5,64 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      smoke:
-        description: "Build smoke-test wheels only (ubuntu x86_64)"
-        required: false
-        default: "false"
+      scope:
+        description: "Legs to build"
+        type: choice
+        default: full
+        options:
+          - full
+          - smoke
 
 jobs:
-  build_wheels_smoke:
-    if: github.event_name == 'workflow_dispatch' && inputs.smoke == 'true'
-    name: Wheels on ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: ubuntu-x86_64
-            os: ubuntu-latest
-            cibw-build: "cp3{11,12,13,14}-manylinux_x86_64"
+  legs:
+    # the leg list lives here rather than in the build job, so that a smoke
+    # dispatch and a full run select from one list instead of two copy-pasted
+    # matrix blocks. Adding a leg is one entry below
 
+    name: Select legs
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    env:
+      # a release builds every leg; only a dispatch can ask for a smoke run
+      SCOPE: ${{ inputs.scope || 'full' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Select legs for this run
+        id: select
+        # every jq result is assigned, never interpolated straight into the
+        # output line: a malformed leg list then fails this job outright
+        # instead of handing the build job an empty matrix
+        run: |
+          legs='[
+            {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},
+            {"name": "ubuntu-aarch64", "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_aarch64"},
+            {"name": "macos-arm64",    "os": "macos-14",       "cibw-build": "cp3{11,12,13,14}-macosx_arm64"},
+            {"name": "windows-amd64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_amd64"},
+            {"name": "windows-arm64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_arm64"}
+          ]'
 
-      - uses: ./.github/actions/build-wheels
-        with:
-          cibw-build: ${{ matrix.cibw-build }}
-          artifact-name: wheels-${{ matrix.name }}
+          if [ "$SCOPE" = smoke ]; then
+            legs=$(jq -c 'map(select(.smoke))' <<<"$legs")
+            count=$(jq -r 'length' <<<"$legs")
+            if [ "$count" != 1 ]; then
+              echo "a smoke run must be exactly one leg, got $count" >&2
+              exit 1
+            fi
+          fi
+
+          legs=$(jq -c 'map(del(.smoke))' <<<"$legs")
+          echo "matrix={\"include\":$legs}" >> "$GITHUB_OUTPUT"
 
   build_wheels:
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.smoke != 'true')
+    needs: legs
     name: Wheels on ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: ubuntu-x86_64
-            os: ubuntu-latest
-            cibw-build: "cp3{11,12,13,14}-manylinux_x86_64"
-          - name: ubuntu-aarch64
-            os: ubuntu-latest
-            cibw-build: "cp3{11,12,13,14}-manylinux_aarch64"
-          - name: macos-arm64
-            os: macos-14
-            cibw-build: "cp3{11,12,13,14}-macosx_arm64"
-          - name: windows-amd64
-            os: windows-latest
-            cibw-build: "cp3{11,12,13,14}-win_amd64"
-          - name: windows-arm64
-            os: windows-latest
-            cibw-build: "cp3{11,12,13,14}-win_arm64"
+      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
