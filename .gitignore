@@ -50,3 +50,6 @@ benchmarks/.cache/
 *.swp
 *.swo
 .DS_Store
+
+# Local scratch notes and working files
+.scratch/
