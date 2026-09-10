@@ -5,6 +5,11 @@ inputs:
   cibw-build:
     description: CIBW_BUILD selector for this leg
     required: true
+  python-tags:
+    description: >-
+      Space-separated CPython tags this leg must produce exactly one wheel for,
+      e.g. "cp311 cp312". The leg fails if the wheelhouse does not match.
+    required: true
   artifact-name:
     description: upload-artifact name
     required: true
@@ -13,13 +18,52 @@ runs:
   using: composite
   steps:
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.23.3
+      uses: pypa/cibuildwheel@v4.2.1
       env:
+        # cp314- does not match cp314t-, so free-threaded builds stay out and
+        # each tag maps to exactly one wheel
         CIBW_BUILD: ${{ inputs.cibw-build }}
-        CIBW_SKIP: "*-musllinux_* pp*"
+        # cibuildwheel 4's default. Pinned so the platform tag on a published
+        # wheel does not change under a later upgrade
+        CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
         CIBW_TEST_REQUIRES: "numpy"
         CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
+
+    - name: Assert the wheel set for this leg
+      shell: bash
+      env:
+        EXPECTED: ${{ inputs.python-tags }}
+        SELECTOR: ${{ inputs.cibw-build }}
+      # cibuildwheel fails a selector that matches no build identifiers, and
+      # says nothing when it matches only some. v0.1.0 shipped without cp314
+      # wheels on a green build
+      run: |
+        # an empty wheelhouse gives an empty array, not the literal glob
+        shopt -s nullglob
+        wheels=(./wheelhouse/*.whl)
+
+        # unquoted on purpose, to split the tags into words
+        expected=$(printf '%s\n' $EXPECTED | sort -u)
+        # grep -c exits 1 on a zero count, which set -e treats as a failure
+        want=$(printf '%s\n' "$expected" | grep -c . || true)
+
+        # omcwa-0.1.0-cp311-cp311-manylinux_2_28_x86_64.whl -> cp311
+        built=$(printf '%s\n' "${wheels[@]}" | sed 's:.*/::' | cut -d- -f3 | sort -u)
+
+        # the sets can match while the count does not, when one tag is built
+        # twice for different platform tags
+        if [ "$built" != "$expected" ] || [ "${#wheels[@]}" -ne "$want" ]; then
+          echo "::error::wheel set mismatch for $SELECTOR"
+          echo "expected one wheel per tag: $(printf '%s ' $expected)"
+          echo "built tags:               $(printf '%s ' $built)"
+          echo "wheelhouse holds ${#wheels[@]} wheel(s):"
+          if [ "${#wheels[@]}" -gt 0 ]; then printf '  %s\n' "${wheels[@]}"; fi
+          exit 1
+        fi
+
+        echo "${#wheels[@]} wheels, one per expected tag: $(printf '%s ' $built)"
 
     - uses: actions/upload-artifact@v4
       with:

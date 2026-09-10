@@ -27,6 +27,10 @@ jobs:
     env:
       # a release builds every leg; only a dispatch can ask for a smoke run
       SCOPE: ${{ inputs.scope || 'full' }}
+      # every leg must produce exactly one wheel per tag, asserted after the
+      # build. Bump this together with the cp3{...} selectors below and with
+      # requires-python in pyproject.toml
+      PYTHON_TAGS: cp311 cp312 cp313 cp314
     steps:
       - name: Select legs for this run
         id: select
@@ -51,7 +55,8 @@ jobs:
             fi
           fi
 
-          legs=$(jq -c 'map(del(.smoke))' <<<"$legs")
+          legs=$(jq -c --arg tags "$PYTHON_TAGS" \
+            'map(del(.smoke) | . + {"python-tags": $tags})' <<<"$legs")
           echo "matrix={\"include\":$legs}" >> "$GITHUB_OUTPUT"
 
   build_wheels:
@@ -70,4 +75,5 @@ jobs:
       - uses: ./.github/actions/build-wheels
         with:
           cibw-build: ${{ matrix.cibw-build }}
+          python-tags: ${{ matrix.python-tags }}
           artifact-name: wheels-${{ matrix.name }}

@@ -62,3 +62,15 @@ Not enforced yet.
 
 Vendored omconvert is pinned separately in
 `native/vendored/omconvert/OMCONVERT_VERSION` (git commit SHA).
+
+## Supported Python versions
+
+The supported range is declared in three places. Change them together:
+
+- `pyproject.toml` -> `[project].requires-python`
+- `.github/workflows/wheels.yml` -> `PYTHON_TAGS` in the `legs` job
+- `.github/workflows/wheels.yml` -> the `cp3{...}` selector on every leg
+
+Each leg checks the wheels it produced against `PYTHON_TAGS`. A selector that
+matches fewer versions than expected fails the build rather than shipping a
+gap, and adding a version without updating `PYTHON_TAGS` fails the same check.
