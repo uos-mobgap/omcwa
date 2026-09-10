@@ -37,13 +37,18 @@ jobs:
         # every jq result is assigned, never interpolated straight into the
         # output line: a malformed leg list then fails this job outright
         # instead of handing the build job an empty matrix
+        #
+        # every runner is native to the architecture its leg builds. On a
+        # foreign runner cibuildwheel matches no build identifiers at all
+        # (run 34423468495), and where it can cross-compile it skips the
+        # import test, which is the one check that proves the wheel loads
         run: |
           legs='[
-            {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},
-            {"name": "ubuntu-aarch64", "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_aarch64"},
-            {"name": "macos-arm64",    "os": "macos-14",       "cibw-build": "cp3{11,12,13,14}-macosx_arm64"},
-            {"name": "windows-amd64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_amd64"},
-            {"name": "windows-arm64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_arm64"}
+            {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",    "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},
+            {"name": "ubuntu-aarch64", "os": "ubuntu-24.04-arm", "cibw-build": "cp3{11,12,13,14}-manylinux_aarch64"},
+            {"name": "macos-arm64",    "os": "macos-14",         "cibw-build": "cp3{11,12,13,14}-macosx_arm64"},
+            {"name": "windows-amd64",  "os": "windows-latest",   "cibw-build": "cp3{11,12,13,14}-win_amd64"},
+            {"name": "windows-arm64",  "os": "windows-11-arm",   "cibw-build": "cp3{11,12,13,14}-win_arm64"}
           ]'
 
           if [ "$SCOPE" = smoke ]; then
