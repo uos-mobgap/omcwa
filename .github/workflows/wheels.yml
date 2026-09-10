@@ -38,13 +38,13 @@ jobs:
         # output line: a malformed leg list then fails this job outright
         # instead of handing the build job an empty matrix
         #
-        # every runner is native to the architecture its leg builds, and the
-        # build action asserts it. GitHub has no `-latest` alias for either
-        # ARM image, so those two labels carry a version and the x86 ones do
-        # not; bump them by hand
+        # each `os` is a runner native to the architecture its leg builds, and
+        # the build action fails a leg where it is not. GitHub publishes no
+        # `-latest` alias for either ARM image, so those two labels carry a
+        # version and need bumping by hand
+        # ref: docs/adr/0004-build-wheels-on-native-runners.md
         #
-        # the platform list here is repeated for readers in the README's
-        # install section. Adding or dropping a leg changes both
+        # the README's install section lists the same platforms
         run: |
           legs='[
             {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",    "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},

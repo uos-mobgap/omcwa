@@ -80,11 +80,10 @@ The README is the one site nothing checks, so it is the one to change first.
 ## Build legs
 
 The leg list is the `legs` array in `.github/workflows/wheels.yml`. Every leg
-runs on a runner native to the architecture it builds. The build action reads
-that architecture off the leg's selector and fails a leg placed on a foreign
-runner. Cross-compilation and emulation are out: cibuildwheel skips the import
-test when it cannot run the wheel, so the leg would publish a wheel nothing has
-imported.
+runs on a runner native to the architecture it builds, and the build action
+fails a leg placed on a foreign runner. A new leg therefore needs a native
+runner before anything else. See
+`docs/adr/0004-build-wheels-on-native-runners.md`.
 
 Adding or dropping a leg also changes the platform list in `README.md` under
 Install.

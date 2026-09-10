@@ -22,10 +22,11 @@ runs:
       env:
         SELECTOR: ${{ inputs.cibw-build }}
         ARCH: ${{ runner.arch }}
-      # on a foreign runner cibuildwheel either matches no build identifiers
-      # at all, as both ARM legs did while they sat on x86 runners, or skips
-      # the import test with a log line rather than a failure. Either way the
-      # leg has to fail here, before it publishes a wheel nothing has imported
+      # cibuildwheel cannot execute a wheel built for another architecture, so
+      # on a foreign runner it skips the import test and reports the skip in a
+      # log line rather than failing. Without this step such a leg goes green
+      # and uploads wheels nothing has imported
+      # ref: docs/adr/0004-build-wheels-on-native-runners.md
       run: |
         case "$SELECTOR" in
           *aarch64* | *arm64*) want=ARM64 ;;
@@ -44,16 +45,16 @@ runs:
         echo "$SELECTOR on a native $ARCH runner"
 
     - name: Build wheels
-      # cibuildwheel 4 repairs Windows wheels with delvewheel, which vendors
-      # msvcp140.dll into omcwa.libs/. v0.1.0 wheels shipped without it and
-      # needed the MSVC redistributable already installed
+      # cibuildwheel repairs Windows wheels with delvewheel, which vendors a
+      # name-mangled msvcp140.dll into omcwa.libs/, so the wheel imports on a
+      # machine with no MSVC redistributable installed
       uses: pypa/cibuildwheel@v4.2.1
       env:
         # cp314- does not match cp314t-, so free-threaded builds stay out and
         # each tag maps to exactly one wheel
         CIBW_BUILD: ${{ inputs.cibw-build }}
-        # cibuildwheel 4's default. Pinned so the platform tag on a published
-        # wheel does not change under a later upgrade
+        # cibuildwheel's own default, pinned so an upgrade cannot move the
+        # platform tag on a published wheel
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
         CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
@@ -65,9 +66,10 @@ runs:
       env:
         EXPECTED: ${{ inputs.python-tags }}
         SELECTOR: ${{ inputs.cibw-build }}
-      # cibuildwheel fails a selector that matches no build identifiers, and
-      # says nothing when it matches only some. v0.1.0 shipped without cp314
-      # wheels on a green build
+      # cibuildwheel fails a selector matching no build identifiers, and stays
+      # silent when it matches only some. A selector left behind by a new
+      # PYTHON_TAGS entry would otherwise ship a green build missing that
+      # interpreter
       run: |
         # an empty wheelhouse gives an empty array, not the literal glob
         shopt -s nullglob
@@ -78,7 +80,7 @@ runs:
         # grep -c exits 1 on a zero count, which set -e treats as a failure
         want=$(printf '%s\n' "$expected" | grep -c . || true)
 
-        # omcwa-0.1.0-cp311-cp311-manylinux_2_28_x86_64.whl -> cp311
+        # omcwa-0.1.0-cp311-cp311-win_arm64.whl -> cp311
         built=$(printf '%s\n' "${wheels[@]}" | sed 's:.*/::' | cut -d- -f3 | sort -u)
 
         # the sets can match while the count does not, when one tag is built
