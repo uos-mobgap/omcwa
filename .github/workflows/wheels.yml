@@ -38,10 +38,13 @@ jobs:
         # output line: a malformed leg list then fails this job outright
         # instead of handing the build job an empty matrix
         #
-        # every runner is native to the architecture its leg builds. On a
-        # foreign runner cibuildwheel matches no build identifiers at all
-        # (run 34423468495), and where it can cross-compile it skips the
-        # import test, which is the one check that proves the wheel loads
+        # every runner is native to the architecture its leg builds, and the
+        # build action asserts it. GitHub has no `-latest` alias for either
+        # ARM image, so those two labels carry a version and the x86 ones do
+        # not; bump them by hand
+        #
+        # the platform list here is repeated for readers in the README's
+        # install section. Adding or dropping a leg changes both
         run: |
           legs='[
             {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",    "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},

@@ -17,6 +17,32 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Assert this runner is native to the leg
+      shell: bash
+      env:
+        SELECTOR: ${{ inputs.cibw-build }}
+        ARCH: ${{ runner.arch }}
+      # on a foreign runner cibuildwheel either matches no build identifiers
+      # at all, as both ARM legs did while they sat on x86 runners, or skips
+      # the import test with a log line rather than a failure. Either way the
+      # leg has to fail here, before it publishes a wheel nothing has imported
+      run: |
+        case "$SELECTOR" in
+          *aarch64* | *arm64*) want=ARM64 ;;
+          *x86_64* | *amd64*) want=X64 ;;
+          *)
+            echo "::error::no architecture recognised in $SELECTOR"
+            exit 1
+            ;;
+        esac
+
+        if [ "$ARCH" != "$want" ]; then
+          echo "::error::$SELECTOR needs a $want runner, this one is $ARCH"
+          exit 1
+        fi
+
+        echo "$SELECTOR on a native $ARCH runner"
+
     - name: Build wheels
       # cibuildwheel 4 repairs Windows wheels with delvewheel, which vendors
       # msvcp140.dll into omcwa.libs/. v0.1.0 wheels shipped without it and
