@@ -3,7 +3,7 @@
 Follows the model of the time-range test in test_process_parity.py: take a
 full recording, compute the expected window with a boolean mask over the
 full arrays, and compare every array on the result. Uses the same committed
-synthetic CWAs under tests/fixtures/golden/, so no new oracle is needed.
+synthetic CWAs under tests/fixtures/golden/, so it needs no new oracle.
 """
 
 from __future__ import annotations
@@ -37,8 +37,9 @@ def processed(cal_success_cwa: Path) -> ProcessedRecording:
 def _off_the_grid(recording: RecordingT) -> RecordingT:
     """Return the same recording carrying a non-uniform timeline.
 
-    Nothing in the library sets ``time_override`` yet, so the mask path is
-    reached by dropping samples off the grid the way a caller would.
+    Nothing in the library sets ``time_override`` yet, so this fixture
+    reaches the mask path by dropping samples off the grid the way a caller
+    would.
     """
     keep = np.arange(recording.n_samples) % 3 != 2
     fields = {
@@ -232,9 +233,9 @@ def test_index_rounding_margin_absorbs_epoch_scale_float_error(
     samples away.
     """
     # index 13 of this fixture is one of the samples that overshoots. The
-    # bound is a literal, not slice_recording's margin: the error is a
-    # fact of float64 at this magnitude, and comparing against the
-    # constant under test would abort here instead of on behaviour.
+    # bound below is a literal. The error is a fact of float64 at this
+    # magnitude, and comparing against slice_recording's own margin would
+    # abort here instead of on behaviour.
     overshoot = (
         float(uniform.time[13]) - uniform.start_time
     ) * uniform.sample_rate_hz - 13

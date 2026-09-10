@@ -155,8 +155,8 @@ temperature, success flag, error code, and auto-calibration diagnostics
 - `valid` and `clipped`: per-sample boolean flags
 - `metadata`: public device and first-session metadata
 
-`acc` and `gyr` are `float64` unless `dtype="float32"` was passed to
-`process_cwa`; `time` stays `float64` regardless, since it carries the full
+`acc` and `gyr` are `float64` unless you pass `dtype="float32"` to
+`process_cwa`. `time` stays `float64` regardless, since it carries the full
 Unix-epoch magnitude.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have
@@ -206,8 +206,8 @@ uv run ruff format --check src tests benchmarks
 uv run pytest -q --cov
 ```
 
-`--cov` prints line coverage for `src/omcwa` with the uncovered lines
-listed. It is a report to read, not a gate: no threshold fails the build.
+`--cov` reports line and branch coverage for `src/omcwa` and lists the
+lines it missed. No threshold fails the build.
 
 ## Benchmarks
 

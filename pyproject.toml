@@ -65,8 +65,7 @@ minimum-version = "0.10"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-# reported, never gated. No fail_under: coverage is a number to read, not a
-# threshold that fails the build.
+# No fail_under. Coverage is a number to read, and nothing gates on it.
 [tool.coverage.run]
 source = ["src/omcwa"]
 branch = true
