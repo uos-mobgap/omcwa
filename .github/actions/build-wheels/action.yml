@@ -18,6 +18,9 @@ runs:
   using: composite
   steps:
     - name: Build wheels
+      # cibuildwheel 4 repairs Windows wheels with delvewheel, which vendors
+      # msvcp140.dll into omcwa.libs/. v0.1.0 wheels shipped without it and
+      # needed the MSVC redistributable already installed
       uses: pypa/cibuildwheel@v4.2.1
       env:
         # cp314- does not match cp314t-, so free-threaded builds stay out and
