@@ -203,8 +203,11 @@ uv sync --group dev
 uv run ruff check src tests benchmarks
 uv run ruff format --check src tests benchmarks
 ./scripts/check_cpp_format.sh
-uv run pytest -q
+uv run pytest -q --cov
 ```
+
+`--cov` prints line coverage for `src/omcwa` with the uncovered lines
+listed. It is a report to read, not a gate: no threshold fails the build.
 
 ## Benchmarks
 

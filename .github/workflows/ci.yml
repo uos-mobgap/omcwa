@@ -23,4 +23,4 @@ jobs:
           uv run ruff check src tests benchmarks
           uv run ruff format --check src tests benchmarks
           ./scripts/check_cpp_format.sh
-          uv run pytest -q
+          uv run pytest -q --cov
