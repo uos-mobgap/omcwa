@@ -27,19 +27,31 @@ jobs:
     env:
       # a release builds every leg; only a dispatch can ask for a smoke run
       SCOPE: ${{ inputs.scope || 'full' }}
+      # every leg must produce exactly one wheel per tag, asserted after the
+      # build. Bump this together with the cp3{...} selectors below and with
+      # requires-python in pyproject.toml
+      PYTHON_TAGS: cp311 cp312 cp313 cp314
     steps:
       - name: Select legs for this run
         id: select
         # every jq result is assigned, never interpolated straight into the
         # output line: a malformed leg list then fails this job outright
         # instead of handing the build job an empty matrix
+        #
+        # each `os` is a runner native to the architecture its leg builds, and
+        # the build action fails a leg where it is not. GitHub publishes no
+        # `-latest` alias for either ARM image, so those two labels carry a
+        # version and need bumping by hand
+        # ref: docs/adr/0004-build-wheels-on-native-runners.md
+        #
+        # the README's install section lists the same platforms
         run: |
           legs='[
-            {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},
-            {"name": "ubuntu-aarch64", "os": "ubuntu-latest",  "cibw-build": "cp3{11,12,13,14}-manylinux_aarch64"},
-            {"name": "macos-arm64",    "os": "macos-14",       "cibw-build": "cp3{11,12,13,14}-macosx_arm64"},
-            {"name": "windows-amd64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_amd64"},
-            {"name": "windows-arm64",  "os": "windows-latest", "cibw-build": "cp3{11,12,13,14}-win_arm64"}
+            {"name": "ubuntu-x86_64",  "os": "ubuntu-latest",    "cibw-build": "cp3{11,12,13,14}-manylinux_x86_64", "smoke": true},
+            {"name": "ubuntu-aarch64", "os": "ubuntu-24.04-arm", "cibw-build": "cp3{11,12,13,14}-manylinux_aarch64"},
+            {"name": "macos-arm64",    "os": "macos-14",         "cibw-build": "cp3{11,12,13,14}-macosx_arm64"},
+            {"name": "windows-amd64",  "os": "windows-latest",   "cibw-build": "cp3{11,12,13,14}-win_amd64"},
+            {"name": "windows-arm64",  "os": "windows-11-arm",   "cibw-build": "cp3{11,12,13,14}-win_arm64"}
           ]'
 
           if [ "$SCOPE" = smoke ]; then
@@ -51,7 +63,8 @@ jobs:
             fi
           fi
 
-          legs=$(jq -c 'map(del(.smoke))' <<<"$legs")
+          legs=$(jq -c --arg tags "$PYTHON_TAGS" \
+            'map(del(.smoke) | . + {"python-tags": $tags})' <<<"$legs")
           echo "matrix={\"include\":$legs}" >> "$GITHUB_OUTPUT"
 
   build_wheels:
@@ -70,4 +83,5 @@ jobs:
       - uses: ./.github/actions/build-wheels
         with:
           cibw-build: ${{ matrix.cibw-build }}
+          python-tags: ${{ matrix.python-tags }}
           artifact-name: wheels-${{ matrix.name }}

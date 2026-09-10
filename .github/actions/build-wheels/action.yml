@@ -5,6 +5,11 @@ inputs:
   cibw-build:
     description: CIBW_BUILD selector for this leg
     required: true
+  python-tags:
+    description: >-
+      Space-separated CPython tags this leg must produce exactly one wheel for,
+      e.g. "cp311 cp312". The leg fails if the wheelhouse does not match.
+    required: true
   artifact-name:
     description: upload-artifact name
     required: true
@@ -12,14 +17,84 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Build wheels
-      uses: pypa/cibuildwheel@v2.23.3
+    - name: Assert this runner is native to the leg
+      shell: bash
       env:
+        SELECTOR: ${{ inputs.cibw-build }}
+        ARCH: ${{ runner.arch }}
+      # cibuildwheel cannot execute a wheel built for another architecture, so
+      # on a foreign runner it skips the import test and reports the skip in a
+      # log line rather than failing. Without this step such a leg goes green
+      # and uploads wheels nothing has imported
+      # ref: docs/adr/0004-build-wheels-on-native-runners.md
+      run: |
+        case "$SELECTOR" in
+          *aarch64* | *arm64*) want=ARM64 ;;
+          *x86_64* | *amd64*) want=X64 ;;
+          *)
+            echo "::error::no architecture recognised in $SELECTOR"
+            exit 1
+            ;;
+        esac
+
+        if [ "$ARCH" != "$want" ]; then
+          echo "::error::$SELECTOR needs a $want runner, this one is $ARCH"
+          exit 1
+        fi
+
+        echo "$SELECTOR on a native $ARCH runner"
+
+    - name: Build wheels
+      # cibuildwheel repairs Windows wheels with delvewheel, which vendors a
+      # name-mangled msvcp140.dll into omcwa.libs/, so the wheel imports on a
+      # machine with no MSVC redistributable installed
+      uses: pypa/cibuildwheel@v4.2.1
+      env:
+        # cp314- does not match cp314t-, so free-threaded builds stay out and
+        # each tag maps to exactly one wheel
         CIBW_BUILD: ${{ inputs.cibw-build }}
-        CIBW_SKIP: "*-musllinux_* pp*"
+        # cibuildwheel's own default, pinned so an upgrade cannot move the
+        # platform tag on a published wheel
+        CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
         CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
         CIBW_TEST_REQUIRES: "numpy"
         CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
+
+    - name: Assert the wheel set for this leg
+      shell: bash
+      env:
+        EXPECTED: ${{ inputs.python-tags }}
+        SELECTOR: ${{ inputs.cibw-build }}
+      # cibuildwheel fails a selector matching no build identifiers, and stays
+      # silent when it matches only some. A selector left behind by a new
+      # PYTHON_TAGS entry would otherwise ship a green build missing that
+      # interpreter
+      run: |
+        # an empty wheelhouse gives an empty array, not the literal glob
+        shopt -s nullglob
+        wheels=(./wheelhouse/*.whl)
+
+        # unquoted on purpose, to split the tags into words
+        expected=$(printf '%s\n' $EXPECTED | sort -u)
+        # grep -c exits 1 on a zero count, which set -e treats as a failure
+        want=$(printf '%s\n' "$expected" | grep -c . || true)
+
+        # omcwa-0.1.0-cp311-cp311-win_arm64.whl -> cp311
+        built=$(printf '%s\n' "${wheels[@]}" | sed 's:.*/::' | cut -d- -f3 | sort -u)
+
+        # the sets can match while the count does not, when one tag is built
+        # twice for different platform tags
+        if [ "$built" != "$expected" ] || [ "${#wheels[@]}" -ne "$want" ]; then
+          echo "::error::wheel set mismatch for $SELECTOR"
+          echo "expected one wheel per tag: $(printf '%s ' $expected)"
+          echo "built tags:               $(printf '%s ' $built)"
+          echo "wheelhouse holds ${#wheels[@]} wheel(s):"
+          if [ "${#wheels[@]}" -gt 0 ]; then printf '  %s\n' "${wheels[@]}"; fi
+          exit 1
+        fi
+
+        echo "${#wheels[@]} wheels, one per expected tag: $(printf '%s ' $built)"
 
     - uses: actions/upload-artifact@v4
       with:
