@@ -222,6 +222,65 @@ def test_bounds_outside_the_recording_clamp_to_it(
     assert window.start_time == processed.start_time
 
 
+@pytest.mark.parametrize(
+    "offset_samples",
+    [0.5, 1.5, 2.5, 100.5],
+    ids=["half", "one_and_a_half", "two_and_a_half", "hundred_and_a_half"],
+)
+def test_a_window_entirely_before_the_recording_is_empty(
+    processed: ProcessedRecording,
+    offset_samples: float,
+) -> None:
+    """A negative index must clamp to 0, not count back from the end.
+
+    ``slice(0, -1)`` keeps all but the last sample. So a stop bound placed
+    more than one sample interval before ``start_time`` used to return almost
+    the whole recording. The parametrisation walks the bound further back
+    because the old behaviour shed one sample per interval.
+    """
+    stop = processed.start_time - offset_samples / processed.sample_rate_hz
+
+    window = slice_recording(processed, stop=stop)
+
+    assert window.n_samples == 0
+    assert window.acc.shape == (0, 3)
+    assert window.valid.shape == (0,)
+
+
+def test_a_window_entirely_after_the_recording_is_empty(
+    processed: ProcessedRecording,
+) -> None:
+    after = float(processed.time[-1]) + 3600.0
+
+    window = slice_recording(processed, start=after, stop=after + 3600.0)
+
+    assert window.n_samples == 0
+    assert window.acc.shape == (0, 3)
+
+
+def test_a_stop_before_the_start_gives_an_empty_window(
+    processed: ProcessedRecording,
+) -> None:
+    start = float(processed.time[2000])
+    stop = float(processed.time[1000])
+
+    window = slice_recording(processed, start=start, stop=stop)
+
+    assert window.n_samples == 0
+    assert window.start_time == start
+
+
+def test_empty_windows_agree_across_both_code_paths(
+    processed: ProcessedRecording,
+) -> None:
+    """The mask path cannot produce a negative index, so it is the oracle."""
+    stop = processed.start_time - 100.5 / processed.sample_rate_hz
+    off_the_grid = _off_the_grid(processed)
+
+    assert slice_recording(processed, stop=stop).n_samples == 0
+    assert slice_recording(off_the_grid, stop=stop).n_samples == 0
+
+
 def test_index_rounding_margin_absorbs_epoch_scale_float_error(
     uniform: UniformRecording,
 ) -> None:

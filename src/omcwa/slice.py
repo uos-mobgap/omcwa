@@ -39,8 +39,22 @@ def slice_recording(
 _INDEX_ROUNDING_MARGIN = 1e-4
 
 
-def _index_at_or_after(t: float, *, start_time: float, rate: float) -> int:
-    return ceil((t - start_time) * rate - _INDEX_ROUNDING_MARGIN)
+def _index_at_or_after(
+    t: float,
+    *,
+    start_time: float,
+    rate: float,
+    n_samples: int,
+) -> int:
+    """Return the first sample index at or after ``t``, clamped to the ends.
+
+    A bound outside the recording saturates at 0 or ``n_samples``. Both ends
+    must clamp: a negative index reaching ``slice`` would count from the back
+    of the array, so a window entirely before the recording would return
+    almost all of it instead of nothing.
+    """
+    index = ceil((t - start_time) * rate - _INDEX_ROUNDING_MARGIN)
+    return min(n_samples, max(0, index))
 
 
 def _sample_bounds(
@@ -54,29 +68,19 @@ def _sample_bounds(
     Computes indices from start_time and sample_rate_hz. Does not build
     ``recording.time``.
     """
-    first = 0
-    if start is not None:
-        first = max(
-            0,
-            _index_at_or_after(
-                start,
-                start_time=recording.start_time,
-                rate=recording.sample_rate_hz,
-            ),
+
+    def index_at(t: float) -> int:
+        return _index_at_or_after(
+            t,
+            start_time=recording.start_time,
+            rate=recording.sample_rate_hz,
+            n_samples=recording.n_samples,
         )
 
-    last = recording.n_samples
-    if stop is not None:
-        last = min(
-            recording.n_samples,
-            _index_at_or_after(
-                stop,
-                start_time=recording.start_time,
-                rate=recording.sample_rate_hz,
-            ),
-        )
+    first = 0 if start is None else index_at(start)
+    last = recording.n_samples if stop is None else index_at(stop)
 
-    return first, last
+    return first, max(first, last)
 
 
 def _time_mask(
