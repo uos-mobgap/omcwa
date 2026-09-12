@@ -303,3 +303,32 @@ def test_index_rounding_margin_absorbs_epoch_scale_float_error(
     for index in range(uniform.n_samples):
         window = slice_recording(uniform, start=float(uniform.time[index]))
         assert window.n_samples == uniform.n_samples - index
+
+
+@pytest.mark.parametrize("fixture", ["uniform", "processed"])
+@pytest.mark.parametrize(
+    "off_the_grid",
+    [False, True],
+    ids=["grid", "non_uniform"],
+)
+def test_an_empty_window_has_no_first_sample_time(
+    request: pytest.FixtureRequest,
+    fixture: str,
+    off_the_grid: bool,
+) -> None:
+    """Neither path invents a timestamp for a sample that is not there.
+
+    The grid path used to return start_time, which is the clamp point and
+    not a sample, while the mask path raised IndexError off an empty
+    time_override. Both recording types carry the property, so both are
+    parametrised here.
+    """
+    recording = request.getfixturevalue(fixture)
+    full = _off_the_grid(recording) if off_the_grid else recording
+    stop = full.start_time - 100.5 / full.sample_rate_hz
+
+    window = slice_recording(full, stop=stop)
+
+    assert window.n_samples == 0
+    with pytest.raises(IndexError, match="empty recording"):
+        _ = window.first_sample_time

@@ -105,7 +105,16 @@ class UniformRecording:
 
     @property
     def first_sample_time(self) -> float:
-        """Time of the first sample. Allocates nothing."""
+        """Time of the first sample. Allocates nothing.
+
+        Raises ``IndexError`` on an empty recording, the same as
+        ``time[0]``, which this property exists to replace. An empty
+        window has no first sample, and ``start_time`` names the grid
+        origin rather than a real one.
+        """
+        if self.n_samples == 0:
+            raise IndexError("an empty recording has no first sample")
+
         if self.time_override is not None:
             return float(self.time_override[0])
 
@@ -147,7 +156,16 @@ class ProcessedRecording:
 
     @property
     def first_sample_time(self) -> float:
-        """Time of the first sample. Allocates nothing."""
+        """Time of the first sample. Allocates nothing.
+
+        Raises ``IndexError`` on an empty recording, the same as
+        ``time[0]``, which this property exists to replace. An empty
+        window has no first sample, and ``start_time`` names the grid
+        origin rather than a real one.
+        """
+        if self.n_samples == 0:
+            raise IndexError("an empty recording has no first sample")
+
         if self.time_override is not None:
             return float(self.time_override[0])
 
