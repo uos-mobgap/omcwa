@@ -77,7 +77,17 @@ def _assert_shared_arrays_match_mask(
     """Compare the arrays both recording types carry."""
     assert window.n_samples == int(mask.sum())
     assert window.sample_rate_hz == full.sample_rate_hz
-    np.testing.assert_array_equal(window.time, full.time[mask])
+    # The grid path rebuilds the timeline as (start_time + first / rate)
+    # + arange / rate. That differs from start_time + (first + j) / rate
+    # by up to one ulp at epoch magnitude, about 2.4e-7 s, unless the
+    # bound lands on a whole second. The tolerance stays well under one
+    # sample interval, so an off-by-one still fails here.
+    np.testing.assert_allclose(
+        window.time,
+        full.time[mask],
+        rtol=0,
+        atol=1e-6,
+    )
     np.testing.assert_array_equal(window.acc, full.acc[mask])
     if full.gyr is None:
         assert window.gyr is None
@@ -396,3 +406,20 @@ def test_a_nan_bound_is_rejected(
 
     with pytest.raises(ValueError, match=f"{bound} must be a unix time"):
         slice_recording(full, **{bound: math.nan})
+
+
+def test_bounds_off_a_whole_second_keep_the_timeline(
+    uniform: UniformRecording,
+) -> None:
+    """Window indices that are not multiples of the sample rate.
+
+    Every other test here picks bounds on a whole second, where the
+    rebuilt timeline is bit-exact. These two are not, so they hold the
+    tolerance in _assert_shared_arrays_match_mask in place.
+    """
+    start, stop, mask = _window_bounds(uniform, 137, 401)
+
+    window = slice_recording(uniform, start=start, stop=stop)
+
+    _assert_shared_arrays_match_mask(window, uniform, mask)
+    assert window.n_samples == 401 - 137
