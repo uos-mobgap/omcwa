@@ -153,9 +153,10 @@ successful identity calibration with error code `0`.
 - `acc`: `float64` acceleration in g, shape `(n_samples, 3)`
 - `gyr`: `float64` angular velocity in degrees per second, or `None`
 - `sample_rate_hz`: the resolved uniform output rate
-- `start_time`: `float64` Unix seconds of the grid origin, which is the
-first sample's time while `time_override` is `None`
-- `n_samples`: the sample count, and the first axis of every array above
+- `start_time`: `float64` Unix seconds of the grid origin. It is the first
+sample's time while `time_override` is `None`
+- `n_samples`: the sample count, and the length of the first axis of every
+array above
 - `first_sample_time`: the first entry of `time`, without building the array
 - `calibration`: scale, offset, temperature coefficients, reference
 temperature, success flag, error code, and auto-calibration diagnostics
@@ -169,15 +170,15 @@ an even grid, otherwise `None`
 `process_cwa`. `time` stays `float64` regardless, since it carries the full
 Unix-epoch magnitude.
 
-`time` is derived rather than stored. While `time_override` is `None` every
+`time` is computed, not stored. While `time_override` is `None`, every
 sample sits on the grid that `start_time` and `sample_rate_hz` describe, and
-`time` is built from those two on first access. A recording whose samples
-have left that grid carries their timestamps in `time_override` instead, and
-`time` returns it unchanged. Nothing in the library sets `time_override`
-today, so it is `None` on anything `process_cwa` or `load_cwa` returns. It is
-there for a recording that has had samples dropped and can no longer describe
-its timeline with a rate. `slice_recording` reads it and carries it onto the
-window it returns.
+the first read of `time` builds the array from those two. A recording that
+has left that grid carries its timestamps in `time_override` instead, and
+`time` returns that array unchanged. Nothing in the library sets
+`time_override` today, so it is `None` on anything `process_cwa` or
+`load_cwa` returns. It is there for a recording with samples dropped out of
+the middle, where no single rate describes what is left. `slice_recording`
+carries it onto the window it returns.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have
 acceleration and gyroscope. Auto-calibration corrects the accelerometer.
@@ -202,8 +203,8 @@ same meanings as above, and two of its own:
 - `path`: the CWA file the samples were read from
 
 A uniform recording has no `calibration`, `valid` or `clipped`, because
-nothing has been fitted or resampled yet. `acc` and `gyr` units match
-`ProcessedRecording`, including the `dtype` argument.
+`load_cwa` neither fits calibration nor resamples. `acc` and `gyr` units
+match `ProcessedRecording`, including the `dtype` argument.
 
 `slice_recording` cuts a time window out of either recording type:
 
@@ -214,10 +215,9 @@ uniform = load_cwa("recording.cwa")
 window = slice_recording(uniform, start=1.7e9, stop=1.7e9 + 3600)
 ```
 
-The window is half-open, `start <= time < stop`. Either bound may be
-omitted or infinite, which leaves that end open. A bound outside the
-recording clamps to it, and a NaN bound raises `ValueError`, the same as
-`time_range`.
+The window is half-open, `start <= time < stop`. Omit either bound, or pass
+an infinity, to leave that end open. A bound outside the recording clamps to
+it, and a NaN bound raises `ValueError`, the same as `time_range`.
 
 ## Current limits
 

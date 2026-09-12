@@ -1,17 +1,18 @@
 """The package root is the public API.
 
 ``__all__`` is the list of names a user may import from ``omcwa``. These
-tests hold it to itself: every name on it resolves, and the list matches the
-one pinned below. That the documentation promises the same names is checked
-by review, not here. See ``docs/adr/0005-documentation-parity-is-reviewed``.
+tests check that every name on it resolves and that the list still matches
+the one pinned below. Whether the documentation promises those same names is
+a question for review, not for the suite. See
+``docs/adr/0005-review-docs-against-the-public-api.md``.
 """
 
 from __future__ import annotations
 
 import omcwa
 
-# Adding a name to the public API means adding it here too, so a new export
-# lands as a deliberate edit rather than a surprise.
+# A new export has to be listed here too, so the exported names cannot
+# change by accident.
 EXPORTED_NAMES = frozenset(
     {
         "__version__",

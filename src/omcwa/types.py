@@ -75,18 +75,19 @@ class UniformRecording:
     Returned by ``load_cwa``. Calibration is identity.
 
     - ``sample_rate_hz``: the file default rate the samples sit on.
-    - ``start_time``: unix seconds of the grid origin. The first
-      sample sits on it only while ``time_override`` is ``None``.
-    - ``n_samples``: sample count, the first axis of every array below.
+    - ``start_time``: Unix seconds of the grid origin. The first sample
+      sits on it only while ``time_override`` is ``None``.
+    - ``n_samples``: sample count, and the length of the first axis of
+      every array below.
     - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
     - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
       ``None`` on a recording without a gyroscope.
     - ``temp``: degrees Celsius, shape ``(n_samples,)``.
     - ``metadata``: device and first-session metadata.
     - ``path``: the CWA file the samples were read from.
-    - ``time_override``: per-sample unix seconds when the timeline is not
+    - ``time_override``: per-sample Unix seconds when the timeline is not
       uniform, else ``None``.
-    - ``time``: unix seconds per sample, from ``time_override`` when it is
+    - ``time``: Unix seconds per sample, from ``time_override`` when it is
       set and from the grid otherwise.
     - ``first_sample_time``: the first entry of ``time``, without building
       the array.
@@ -142,22 +143,23 @@ class UniformRecording:
 class ProcessedRecording:
     """Uniformly resampled IMU streams.
 
-    Returned by ``process_cwa``. Temperature is not retained on this type.
+    Returned by ``process_cwa``. This type does not carry temperature.
 
     - ``sample_rate_hz``: the resolved uniform output rate.
-    - ``start_time``: unix seconds of the grid origin. The first
-      sample sits on it only while ``time_override`` is ``None``.
-    - ``n_samples``: sample count, the first axis of every array below.
+    - ``start_time``: Unix seconds of the grid origin. The first sample
+      sits on it only while ``time_override`` is ``None``.
+    - ``n_samples``: sample count, and the length of the first axis of
+      every array below.
     - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
     - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
       ``None`` on a recording without a gyroscope.
-    - ``calibration``: the coefficients applied to ``acc``, with the
-      auto-calibration diagnostics behind them.
+    - ``calibration``: the coefficients ``process_cwa`` applied to ``acc``,
+      plus the auto-calibration diagnostics.
     - ``metadata``: device and first-session metadata.
     - ``valid`` and ``clipped``: per-sample flags, shape ``(n_samples,)``.
-    - ``time_override``: per-sample unix seconds when the timeline is not
+    - ``time_override``: per-sample Unix seconds when the timeline is not
       uniform, else ``None``.
-    - ``time``: unix seconds per sample, from ``time_override`` when it is
+    - ``time``: Unix seconds per sample, from ``time_override`` when it is
       set and from the grid otherwise.
     - ``first_sample_time``: the first entry of ``time``, without building
       the array.
