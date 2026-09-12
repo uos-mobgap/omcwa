@@ -72,10 +72,26 @@ class Calibration:
 class UniformRecording:
     """Uncalibrated IMU samples on a uniform grid at the file default rate.
 
-    Accelerometer values are in g and gyroscope values are in dps.
-    Calibration is identity. ``acc`` and ``gyr`` are float64 unless
-    ``load_cwa`` was called with ``dtype="float32"``. ``temp`` and ``time``
-    are float64 regardless.
+    Returned by ``load_cwa``. Calibration is identity.
+
+    - ``sample_rate_hz``: the file default rate the samples sit on.
+    - ``start_time``: unix seconds at sample index 0, the grid origin.
+    - ``n_samples``: sample count, the first axis of every array below.
+    - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
+    - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
+      ``None`` on a recording without a gyroscope.
+    - ``temp``: degrees Celsius, shape ``(n_samples,)``.
+    - ``metadata``: device and first-session metadata.
+    - ``path``: the CWA file the samples were read from.
+    - ``time_override``: per-sample unix seconds when the timeline is not
+      uniform, else ``None``.
+    - ``time``: unix seconds per sample, from ``time_override`` when it is
+      set and from the grid otherwise.
+    - ``first_sample_time``: the first entry of ``time``, without building
+      the array.
+
+    ``acc`` and ``gyr`` are float64 unless ``load_cwa`` was called with
+    ``dtype="float32"``. ``temp`` and ``time`` are float64 regardless.
     """
 
     sample_rate_hz: float
@@ -125,9 +141,27 @@ class UniformRecording:
 class ProcessedRecording:
     """Uniformly resampled IMU streams.
 
-    Temperature is not retained on this type. ``acc`` and ``gyr`` are
-    float64 unless ``process_cwa`` was called with ``dtype="float32"``.
-    ``time`` is float64 regardless.
+    Returned by ``process_cwa``. Temperature is not retained on this type.
+
+    - ``sample_rate_hz``: the resolved uniform output rate.
+    - ``start_time``: unix seconds at sample index 0, the grid origin.
+    - ``n_samples``: sample count, the first axis of every array below.
+    - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
+    - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
+      ``None`` on a recording without a gyroscope.
+    - ``calibration``: the coefficients applied to ``acc``, with the
+      auto-calibration diagnostics behind them.
+    - ``metadata``: device and first-session metadata.
+    - ``valid`` and ``clipped``: per-sample flags, shape ``(n_samples,)``.
+    - ``time_override``: per-sample unix seconds when the timeline is not
+      uniform, else ``None``.
+    - ``time``: unix seconds per sample, from ``time_override`` when it is
+      set and from the grid otherwise.
+    - ``first_sample_time``: the first entry of ``time``, without building
+      the array.
+
+    ``acc`` and ``gyr`` are float64 unless ``process_cwa`` was called with
+    ``dtype="float32"``. ``time`` is float64 regardless.
     """
 
     sample_rate_hz: float

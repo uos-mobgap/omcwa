@@ -12,6 +12,7 @@ from omcwa.defaults import (
     InterpolateMode,
 )
 from omcwa.process import CalibrationError, load_cwa, process_cwa
+from omcwa.slice import slice_recording
 from omcwa.types import (
     Calibration,
     ProcessedRecording,
@@ -22,6 +23,7 @@ __all__ = [
     "__version__",
     "load_cwa",
     "process_cwa",
+    "slice_recording",
     "CalibrationError",
     "Calibration",
     "UniformRecording",

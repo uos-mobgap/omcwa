@@ -149,19 +149,33 @@ successful identity calibration with error code `0`.
 
 `process_cwa` returns a `ProcessedRecording`:
 
-- `time`: `float64` Unix timestamps in seconds
-- `acc`: `float64` acceleration in g, shape `(samples, 3)`
+- `time`: `float64` Unix timestamps in seconds, one per sample
+- `acc`: `float64` acceleration in g, shape `(n_samples, 3)`
 - `gyr`: `float64` angular velocity in degrees per second, or `None`
 - `sample_rate_hz`: the resolved uniform output rate
+- `start_time`: `float64` Unix seconds at sample index 0
+- `n_samples`: the sample count, and the first axis of every array above
+- `first_sample_time`: the first entry of `time`, without building the array
 - `calibration`: scale, offset, temperature coefficients, reference
 temperature, success flag, error code, and auto-calibration diagnostics
 (stationary-point count, axis coverage, mean SVM fit error)
 - `valid` and `clipped`: per-sample boolean flags
 - `metadata`: public device and first-session metadata
+- `time_override`: per-sample timestamps when the samples are no longer on
+an even grid, otherwise `None`
 
 `acc` and `gyr` are `float64` unless you pass `dtype="float32"` to
 `process_cwa`. `time` stays `float64` regardless, since it carries the full
 Unix-epoch magnitude.
+
+`time` is derived rather than stored. While `time_override` is `None` every
+sample sits on the grid that `start_time` and `sample_rate_hz` describe, and
+`time` is built from those two on first access. A recording whose samples
+have left that grid carries their timestamps in `time_override`, and `time`
+returns it unchanged. Nothing in the library sets `time_override` today, so
+it is `None` on anything `process_cwa` or `load_cwa` returns. It is there for
+a caller who drops samples and needs the timeline to stay honest. Set it
+alongside the shortened arrays, and `slice_recording` will carry it through.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have
 acceleration and gyroscope. Auto-calibration corrects the accelerometer.
@@ -178,9 +192,28 @@ print(uniform.acc.shape)
 print(uniform.temp.shape)
 ```
 
-`acc` and `gyr` units match `ProcessedRecording`, including the `dtype`
-argument. `temp` is `float64` degrees Celsius. `slice_recording` in
-`omcwa.slice` cuts half-open time slices of either public recording type.
+It carries `time`, `acc`, `gyr`, `sample_rate_hz`, `start_time`,
+`n_samples`, `first_sample_time`, `metadata` and `time_override` with the
+same meanings as above, and two of its own:
+
+- `temp`: `float64` degrees Celsius, one per sample
+- `path`: the CWA file the samples were read from
+
+A uniform recording has no `calibration`, `valid` or `clipped`, because
+nothing has been fitted or resampled yet. `acc` and `gyr` units match
+`ProcessedRecording`, including the `dtype` argument.
+
+`slice_recording` cuts half-open time slices of either recording type:
+
+```python
+from omcwa import load_cwa, slice_recording
+
+uniform = load_cwa("recording.cwa")
+window = slice_recording(uniform, start=1.7e9, stop=1.7e9 + 3600)
+```
+
+The bounds follow the same rules as `time_range`: half-open, either one
+optional, clamped to the recording, and `ValueError` on NaN.
 
 ## Current limits
 

@@ -16,9 +16,13 @@ from typing import TypeVar
 import numpy as np
 import pytest
 
-from omcwa import load_cwa, process_cwa
-from omcwa.slice import slice_recording
-from omcwa.types import ProcessedRecording, UniformRecording
+from omcwa import (
+    ProcessedRecording,
+    UniformRecording,
+    load_cwa,
+    process_cwa,
+    slice_recording,
+)
 
 RecordingT = TypeVar("RecordingT", UniformRecording, ProcessedRecording)
 
