@@ -8,6 +8,7 @@ synthetic CWAs under tests/fixtures/golden/, so it needs no new oracle.
 
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
@@ -332,3 +333,66 @@ def test_an_empty_window_has_no_first_sample_time(
     assert window.n_samples == 0
     with pytest.raises(IndexError, match="empty recording"):
         _ = window.first_sample_time
+
+
+@pytest.mark.parametrize(
+    "off_the_grid",
+    [False, True],
+    ids=["grid", "non_uniform"],
+)
+def test_an_infinite_stop_keeps_every_later_sample(
+    processed: ProcessedRecording,
+    off_the_grid: bool,
+) -> None:
+    """``(t, inf)`` is how a caller writes "from t to the end".
+
+    The grid path turns bounds into indices, so an infinite bound used to
+    raise OverflowError in ceil() while the mask path kept the tail.
+    """
+    full = _off_the_grid(processed) if off_the_grid else processed
+    start = float(full.time[1000])
+
+    window = slice_recording(full, start=start, stop=math.inf)
+
+    _assert_shared_arrays_match_mask(window, full, full.time >= start)
+
+
+@pytest.mark.parametrize(
+    "off_the_grid",
+    [False, True],
+    ids=["grid", "non_uniform"],
+)
+def test_an_infinite_start_keeps_every_earlier_sample(
+    processed: ProcessedRecording,
+    off_the_grid: bool,
+) -> None:
+    full = _off_the_grid(processed) if off_the_grid else processed
+    stop = float(full.time[1000])
+
+    window = slice_recording(full, start=-math.inf, stop=stop)
+
+    _assert_shared_arrays_match_mask(window, full, full.time < stop)
+
+
+@pytest.mark.parametrize("bound", ["start", "stop"])
+@pytest.mark.parametrize(
+    "off_the_grid",
+    [False, True],
+    ids=["grid", "non_uniform"],
+)
+def test_a_nan_bound_is_rejected(
+    processed: ProcessedRecording,
+    bound: str,
+    off_the_grid: bool,
+) -> None:
+    """Both paths reject NaN rather than returning an empty window.
+
+    Nothing compares true against NaN, so the mask path would hand back
+    nothing and the caller would read that as a gap in the recording. The
+    match is on the guard's own wording. ceil() raises ValueError on NaN
+    too, so a looser pattern would pass without the guard.
+    """
+    full = _off_the_grid(processed) if off_the_grid else processed
+
+    with pytest.raises(ValueError, match=f"{bound} must be a unix time"):
+        slice_recording(full, **{bound: math.nan})

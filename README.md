@@ -116,6 +116,10 @@ when a downstream pipeline needs `omconvert`'s exact original numbers.
 `start <= time < stop`. Calibration and resampling still run on the full
 session. The range trims the finished output.
 
+Either bound may be infinite, which leaves that end open. A bound outside
+the recording clamps to it, so a range that misses the session returns
+`n_samples=0`. A NaN bound raises `ValueError`.
+
 ## Calibration failures
 
 Strict failure is the default. `CalibrationError` is a `RuntimeError`. The

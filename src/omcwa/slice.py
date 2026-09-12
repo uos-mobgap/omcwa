@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import ceil
+from math import ceil, isnan
 from typing import overload
 
 import numpy as np
@@ -52,9 +52,17 @@ def _index_at_or_after(
     must clamp: a negative index reaching ``slice`` would count from the back
     of the array, so a window entirely before the recording would return
     almost all of it instead of nothing.
+
+    The clamp runs on the float offset, before ``ceil``, so an infinite
+    bound saturates rather than raising ``OverflowError``. ``t`` must not
+    be NaN. ``slice_recording`` rejects that up front.
     """
-    index = ceil((t - start_time) * rate - _INDEX_ROUNDING_MARGIN)
-    return min(n_samples, max(0, index))
+    offset = (t - start_time) * rate - _INDEX_ROUNDING_MARGIN
+    if offset <= 0.0:
+        return 0
+    if offset >= n_samples:
+        return n_samples
+    return ceil(offset)
 
 
 def _sample_bounds(
@@ -81,6 +89,12 @@ def _sample_bounds(
     last = recording.n_samples if stop is None else index_at(stop)
 
     return first, max(first, last)
+
+
+def _reject_nan(name: str, bound: float | None) -> None:
+    """Reject a NaN bound, which no time comparison can order."""
+    if bound is not None and isnan(bound):
+        raise ValueError(f"{name} must be a unix time in seconds, got NaN")
 
 
 def _time_mask(
@@ -120,7 +134,16 @@ def slice_recording(
     returns a view, not a boolean mask over the full ``time`` array. A
     recording with ``time_override`` set is not on that grid, so it uses
     the boolean mask instead.
+
+    A ``None`` bound is open ended, and an infinite one means the same.
+    A finite bound outside the recording clamps to it, and a stop at or
+    before the start gives an empty recording. A NaN bound raises
+    ``ValueError``. Every comparison against NaN is false, so both paths
+    would otherwise return an empty window for what is a caller bug.
     """
+    _reject_nan("start", start)
+    _reject_nan("stop", stop)
+
     if recording.time_override is None:
         first, last = _sample_bounds(recording, start=start, stop=stop)
         key: slice | np.ndarray = slice(first, last)
