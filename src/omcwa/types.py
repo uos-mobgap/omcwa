@@ -75,7 +75,8 @@ class UniformRecording:
     Returned by ``load_cwa``. Calibration is identity.
 
     - ``sample_rate_hz``: the file default rate the samples sit on.
-    - ``start_time``: unix seconds at sample index 0, the grid origin.
+    - ``start_time``: unix seconds of the grid origin. The first
+      sample sits on it only while ``time_override`` is ``None``.
     - ``n_samples``: sample count, the first axis of every array below.
     - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
     - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
@@ -144,7 +145,8 @@ class ProcessedRecording:
     Returned by ``process_cwa``. Temperature is not retained on this type.
 
     - ``sample_rate_hz``: the resolved uniform output rate.
-    - ``start_time``: unix seconds at sample index 0, the grid origin.
+    - ``start_time``: unix seconds of the grid origin. The first
+      sample sits on it only while ``time_override`` is ``None``.
     - ``n_samples``: sample count, the first axis of every array below.
     - ``acc``: acceleration in g, shape ``(n_samples, 3)``.
     - ``gyr``: angular velocity in dps, shape ``(n_samples, 3)``, or
