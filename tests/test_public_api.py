@@ -1,15 +1,15 @@
 """The package root is the public API.
 
 Every name the documentation tells a user to import comes from ``omcwa``
-itself. The documentation is the input here rather than a copy of it: a name
-the README promises and ``__init__`` forgets is exactly how
+itself. The documentation is the input here rather than a copy of it. A
+name the README promises and ``__init__`` forgets is exactly how
 ``slice_recording`` stayed documented and unreachable.
 """
 
 from __future__ import annotations
 
-import ast
 import json
+import re
 from pathlib import Path
 
 import omcwa
@@ -41,15 +41,24 @@ EXPORTED_NAMES = frozenset(
 )
 
 
+# A ``from omcwa... import ...`` statement, in both the one-line and the
+# parenthesised form. Matched as text rather than parsed. A snippet is not
+# always a whole valid module, and a notebook magic or an abbreviated
+# example must not turn into a failure about the public API.
+_IMPORT = re.compile(
+    r"^[ \t]*from[ \t]+(omcwa[\w.]*)[ \t]+import[ \t]+(\([^)]*\)|[^\n]+)",
+    re.MULTILINE,
+)
+
+
 def _python_blocks() -> list[str]:
     """Return every Python snippet the documentation shows a user."""
     blocks = []
 
-    lines = README.read_text(encoding="utf-8").splitlines()
     fence: list[str] | None = None
-    for line in lines:
+    for line in README.read_text(encoding="utf-8").splitlines():
         if fence is None:
-            if line.strip() == "```python":
+            if line.strip().startswith("```py"):
                 fence = []
         elif line.strip() == "```":
             blocks.append("\n".join(fence))
@@ -67,15 +76,17 @@ def _python_blocks() -> list[str]:
     return blocks
 
 
-def _documented_imports() -> list[ast.ImportFrom]:
-    """Return every ``from omcwa... import ...`` in the documentation."""
-    return [
-        node
-        for block in _python_blocks()
-        for node in ast.walk(ast.parse(block))
-        if isinstance(node, ast.ImportFrom)
-        and (node.module or "").split(".")[0] == "omcwa"
-    ]
+def _documented_imports() -> list[tuple[str, list[str]]]:
+    """Return the module and imported names of each documented import."""
+    imports = []
+    for block in _python_blocks():
+        for module, tail in _IMPORT.findall(block):
+            names = [
+                name.split(" as ")[0].strip()
+                for name in tail.strip("()").split(",")
+            ]
+            imports.append((module, [name for name in names if name]))
+    return imports
 
 
 def test_the_documentation_shows_imports() -> None:
@@ -84,13 +95,12 @@ def test_the_documentation_shows_imports() -> None:
 
 
 def test_no_documented_import_reaches_into_a_submodule() -> None:
-    modules = sorted({node.module for node in _documented_imports()})
-    assert modules == ["omcwa"]
+    assert sorted({module for module, _ in _documented_imports()}) == ["omcwa"]
 
 
 def test_every_documented_name_is_exported() -> None:
     documented = sorted(
-        {alias.name for node in _documented_imports() for alias in node.names}
+        {name for _, names in _documented_imports() for name in names}
     )
     assert [name for name in documented if name not in omcwa.__all__] == []
 
