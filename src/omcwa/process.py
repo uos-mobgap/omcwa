@@ -179,7 +179,10 @@ def process_cwa(
 
     ``sample_rate_hz=0`` selects the file default rate. ``time_range`` is a
     half-open ``(start, stop)`` interval in Unix seconds. It trims the output
-    only after full-file calibration and resampling.
+    only after full-file calibration and resampling. Either bound may be
+    infinite to leave that end open. A bound outside the recording clamps
+    to it, so a range that misses the session returns ``n_samples=0``. A
+    NaN bound raises :class:`ValueError`.
 
     ``dtype="float64"`` matches every consumer today. ``"float32"`` halves
     ``acc``/``gyr`` memory, and ``time`` stays float64 regardless. Output is

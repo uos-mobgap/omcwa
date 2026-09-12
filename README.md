@@ -116,6 +116,10 @@ when a downstream pipeline needs `omconvert`'s exact original numbers.
 `start <= time < stop`. Calibration and resampling still run on the full
 session. The range trims the finished output.
 
+Either bound may be infinite, which leaves that end open. A bound outside
+the recording clamps to it, so a range that misses the session returns
+`n_samples=0`. A NaN bound raises `ValueError`.
+
 ## Calibration failures
 
 Strict failure is the default. `CalibrationError` is a `RuntimeError`. The
@@ -155,8 +159,8 @@ temperature, success flag, error code, and auto-calibration diagnostics
 - `valid` and `clipped`: per-sample boolean flags
 - `metadata`: public device and first-session metadata
 
-`acc` and `gyr` are `float64` unless `dtype="float32"` was passed to
-`process_cwa`; `time` stays `float64` regardless, since it carries the full
+`acc` and `gyr` are `float64` unless you pass `dtype="float32"` to
+`process_cwa`. `time` stays `float64` regardless, since it carries the full
 Unix-epoch magnitude.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have
@@ -203,8 +207,11 @@ uv sync --group dev
 uv run ruff check src tests benchmarks
 uv run ruff format --check src tests benchmarks
 ./scripts/check_cpp_format.sh
-uv run pytest -q
+uv run pytest -q --cov
 ```
+
+`--cov` reports line and branch coverage for `src/omcwa` and lists the
+lines it missed. No threshold fails the build.
 
 ## Benchmarks
 
