@@ -59,8 +59,20 @@ def _stub_classes() -> dict[str, set[str]]:
     }
 
 
+def _is_property(node: ast.FunctionDef) -> bool:
+    return any(
+        isinstance(decorator, ast.Name) and decorator.id == "property"
+        for decorator in node.decorator_list
+    )
+
+
 def _stub_signatures() -> dict[str, list[str]]:
-    """Map every stub callable to its parameter names, keyed by dotted path."""
+    """Map every stub callable to its parameter names, keyed by dotted path.
+
+    A ``def_readonly`` field reaches the stub as a property, and its
+    ``__doc__`` holds prose rather than a signature line, so properties
+    stay out of the map.
+    """
     signatures: dict[str, list[str]] = {}
     for node in _stub_body():
         if isinstance(node, ast.FunctionDef):
@@ -71,6 +83,7 @@ def _stub_signatures() -> dict[str, list[str]]:
                     f"{node.name}.{method.name}": _parameters(method.args)
                     for method in node.body
                     if isinstance(method, ast.FunctionDef)
+                    and not _is_property(method)
                 }
             )
     return signatures

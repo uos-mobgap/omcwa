@@ -58,7 +58,7 @@ changes in `native/VENDORING.md`.
   `vendored/omconvert/...`.
 - A name exported from `PYBIND11_MODULE` needs an entry in
   `src/omcwa/_native.pyi`. `tests/test_native_stub.py` compares the two in
-  both directions.
+  both directions. A `def_readonly` field is a `@property` in the stub.
 
 ### clang-tidy
 
