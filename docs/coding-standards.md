@@ -1,13 +1,13 @@
 # Coding standards
 
-## Python (`src/omcwa/`, `tests/`)
+## Python (`src/omcwa/`, `tests/`, `scripts/`)
 
 We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy.readthedocs.io/) for type checking.
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests
-uv run ruff format src tests
+uv run ruff check src tests scripts
+uv run ruff format src tests scripts
 uv run mypy
 ```
 
@@ -20,6 +20,7 @@ Settings are in `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`.
 - `src/omcwa/py.typed` publishes those hints. mypy runs strict over `src/omcwa` and stays clean.
 - No public return type is `Any`. `metadata: dict[str, Any]` is the one exception.
 - `tests/typing/` holds type-level checks of the public API. mypy is their runner. pytest collects nothing there.
+- Every wheel carries `py.typed` and `_native.pyi`. `scripts/check_installed_package.py` asserts both, as the cibuildwheel test command on every leg.
 
 ### Defaults
 
@@ -88,9 +89,10 @@ Declaring the list turns off scikit-build-core's default globs, so a new licence
 
 ## Supported Python versions
 
-The supported range is declared in four places. Change them together:
+The supported range is declared in five places. Change them together:
 
 - `pyproject.toml` -> `[project].requires-python`
+- `pyproject.toml` -> `[tool.mypy].python_version`, pinned to the oldest supported interpreter
 - `.github/workflows/wheels.yml` -> `PYTHON_TAGS` in the `legs` job
 - `.github/workflows/wheels.yml` -> the `cp3{...}` selector on every leg
 - `README.md` -> the interpreter list under Install

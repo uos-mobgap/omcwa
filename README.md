@@ -234,8 +234,8 @@ Run the development gates with:
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests benchmarks
-uv run ruff format --check src tests benchmarks
+uv run ruff check src tests benchmarks scripts
+uv run ruff format --check src tests benchmarks scripts
 uv run mypy
 ./scripts/check_cpp_format.sh
 uv run pytest -q --cov
