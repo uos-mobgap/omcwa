@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, TypeVar, get_args
 
 import numpy as np
 
@@ -17,6 +17,9 @@ from omcwa.defaults import (
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
     USE_FILE_SAMPLE_RATE,
+    CalibrationFailurePolicy,
+    CalibrationSource,
+    Dtype,
 )
 from omcwa.slice import slice_recording
 from omcwa.types import (
@@ -26,9 +29,17 @@ from omcwa.types import (
     ensure_path_str,
 )
 
-CalibrationFailurePolicy = Literal["raise", "identity"]
-CalibrationSource = Literal["data", "player"]
-Dtype = Literal["float64", "float32"]
+# The check and the message both come from the alias, so a new option cannot
+# be accepted by one and left out of the other.
+_FAILURE_POLICIES: Final[tuple[CalibrationFailurePolicy, ...]] = get_args(
+    CalibrationFailurePolicy
+)
+_CALIBRATION_SOURCES: Final[tuple[CalibrationSource, ...]] = get_args(
+    CalibrationSource
+)
+_DTYPES: Final[tuple[Dtype, ...]] = get_args(Dtype)
+
+_OptionT = TypeVar("_OptionT", bound=str)
 
 
 class CalibrationError(RuntimeError):
@@ -52,34 +63,20 @@ class CalibrationError(RuntimeError):
         )
 
 
-def _validate_failure_policy(
-    on_calibration_failure: str,
-) -> CalibrationFailurePolicy:
-    if on_calibration_failure not in {"raise", "identity"}:
-        msg = (
-            "on_calibration_failure must be 'raise' or 'identity', "
-            f"got {on_calibration_failure!r}"
-        )
-        raise ValueError(msg)
-    return on_calibration_failure
-
-
-def _validate_dtype(dtype: str) -> Dtype:
-    if dtype not in {"float64", "float32"}:
-        msg = f"dtype must be 'float64' or 'float32', got {dtype!r}"
-        raise ValueError(msg)
-    return dtype
-
-
-def _validate_calibration_source(source: str) -> CalibrationSource:
-    if source not in {"data", "player"}:
-        msg = f"calibration_source must be 'data' or 'player', got {source!r}"
-        raise ValueError(msg)
-    return source
+def _validate_choice(
+    name: str, value: str, options: tuple[_OptionT, ...]
+) -> _OptionT:
+    """Return ``value`` when it is one of ``options``, else raise."""
+    for option in options:
+        if value == option:
+            return option
+    allowed = " or ".join(repr(option) for option in options)
+    msg = f"{name} must be {allowed}, got {value!r}"
+    raise ValueError(msg)
 
 
 def _public_metadata(
-    loaded: Any,
+    loaded: _native.LoadedCwa,
     *,
     sample_rate_hz: float,
 ) -> dict[str, Any]:
@@ -127,7 +124,7 @@ def load_cwa(
     ``dtype="float64"`` matches every consumer today. ``"float32"`` halves
     ``acc``/``gyr`` memory. ``temp`` and ``time`` stay float64 regardless.
     """
-    output_dtype = _validate_dtype(dtype)
+    output_dtype = _validate_choice("dtype", dtype, _DTYPES)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
     result = loaded.resample(
@@ -189,9 +186,13 @@ def process_cwa(
     within one float32 ULP of the float64 result, but verify against a
     downstream pipeline before switching its default.
     """
-    failure_policy = _validate_failure_policy(on_calibration_failure)
-    source = _validate_calibration_source(calibration_source)
-    output_dtype = _validate_dtype(dtype)
+    failure_policy = _validate_choice(
+        "on_calibration_failure", on_calibration_failure, _FAILURE_POLICIES
+    )
+    source = _validate_choice(
+        "calibration_source", calibration_source, _CALIBRATION_SOURCES
+    )
+    output_dtype = _validate_choice("dtype", dtype, _DTYPES)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
 

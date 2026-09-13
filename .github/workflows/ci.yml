@@ -20,7 +20,8 @@ jobs:
       - name: Lint and test
         run: |
           uv sync --all-groups
-          uv run ruff check src tests benchmarks
-          uv run ruff format --check src tests benchmarks
+          uv run ruff check src tests benchmarks scripts
+          uv run ruff format --check src tests benchmarks scripts
+          uv run mypy
           ./scripts/check_cpp_format.sh
           uv run pytest -q --cov

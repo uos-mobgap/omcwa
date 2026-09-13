@@ -165,6 +165,41 @@ window = slice_recording(uniform, start=1.7e9, stop=1.7e9 + 3600)
 
 The window is half-open, `start <= time < stop`. Omit either bound, or pass an infinity, to leave that end open. A bound outside the recording clamps to it, and a NaN bound raises `ValueError`, the same as `time_range`.
 
+## Type checking
+
+omcwa ships a `py.typed` marker, so mypy and pyright read its annotations instead of ignoring the package.
+
+The string options are `Literal` types, exported under the names the parameters use:
+
+```python
+from omcwa import (
+    CalibrationFailurePolicy,
+    CalibrationSource,
+    Dtype,
+    ProcessedRecording,
+    process_cwa,
+)
+
+
+def load_recording(
+    path: str,
+    *,
+    calibration_source: CalibrationSource = "data",
+    on_calibration_failure: CalibrationFailurePolicy = "raise",
+    dtype: Dtype = "float64",
+) -> ProcessedRecording:
+    return process_cwa(
+        path,
+        calibration_source=calibration_source,
+        on_calibration_failure=on_calibration_failure,
+        dtype=dtype,
+    )
+```
+
+Every exported `DEFAULT_*` constant carries the type of the parameter it defaults, so passing one back in type-checks.
+
+`slice_recording` returns the type it was handed. A `ProcessedRecording` in gives a `ProcessedRecording` out, with no cast at the call site.
+
 ## Memory
 
 omcwa processes a recording whole and holds it whole, so the output costs a fixed number of bytes per sample:
@@ -199,8 +234,9 @@ Run the development gates with:
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests benchmarks
-uv run ruff format --check src tests benchmarks
+uv run ruff check src tests benchmarks scripts
+uv run ruff format --check src tests benchmarks scripts
+uv run mypy
 ./scripts/check_cpp_format.sh
 uv run pytest -q --cov
 ```

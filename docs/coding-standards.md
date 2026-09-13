@@ -1,27 +1,36 @@
 # Coding standards
 
-## Python (`src/omcwa/`, `tests/`)
+## Python (`src/omcwa/`, `tests/`, `scripts/`)
 
-We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
+We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy.readthedocs.io/) for type checking.
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests
-uv run ruff format src tests
+uv run ruff check src tests scripts
+uv run ruff format src tests scripts
+uv run mypy
 ```
 
-Settings are in `pyproject.toml` under `[tool.ruff]`.
+Settings are in `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`.
 
 ### Conventions
 
 - Public functions and classes need short, formal docstrings.
 - Public APIs need type hints.
+- `src/omcwa/py.typed` publishes those hints. mypy runs strict over `src/omcwa` and stays clean.
+- No public return type is `Any`. `metadata: dict[str, Any]` is the one exception.
+- `tests/typing/` holds type-level checks of the public API. mypy is their runner. pytest collects nothing there.
+- Every wheel carries `py.typed` and `_native.pyi`. `scripts/check_installed_package.py` asserts both, as the cibuildwheel test command on every leg.
 
 ### Defaults
 
-Pipeline defaults live in `src/omcwa/defaults.py` (`InterpolateMode`,
+Pipeline defaults live in `src/omcwa/defaults.py` (`InterpolateMode`, the
+`CalibrationFailurePolicy`, `CalibrationSource` and `Dtype` aliases,
 `DEFAULT_*`, `USE_FILE_SAMPLE_RATE`). Keep them in sync with
 `native/omcwa_defaults.h`.
+
+Every `DEFAULT_*` carries a `Final` annotation naming the type its parameter
+accepts.
 
 ## C++ (`native/bridge.cpp`, `native/omconvert_extern.h`, `native/omcwa_defaults.h`)
 
@@ -47,6 +56,9 @@ changes in `native/VENDORING.md`.
   in sync with `src/omcwa/defaults.py`.
 - Comments that document omconvert behaviour end with a `ref:` line pointing at
   `vendored/omconvert/...`.
+- A name exported from `PYBIND11_MODULE` needs an entry in
+  `src/omcwa/_native.pyi`. `tests/test_native_stub.py` compares the two in
+  both directions. A `def_readonly` field is a `@property` in the stub.
 
 ### clang-tidy
 
@@ -54,7 +66,7 @@ Not enforced yet.
 
 ## Package version
 
-`0.1.0` is declared in three places. Bump them together, following `releasing.md`:
+Version is declared in three places. Bump them together, following `releasing.md`:
 
 - `pyproject.toml` -> `[project].version`
 - `src/omcwa/__init__.py` -> `__version__`
@@ -77,9 +89,10 @@ Declaring the list turns off scikit-build-core's default globs, so a new licence
 
 ## Supported Python versions
 
-The supported range is declared in four places. Change them together:
+The supported range is declared in five places. Change them together:
 
 - `pyproject.toml` -> `[project].requires-python`
+- `pyproject.toml` -> `[tool.mypy].python_version`, pinned to the oldest supported interpreter
 - `.github/workflows/wheels.yml` -> `PYTHON_TAGS` in the `legs` job
 - `.github/workflows/wheels.yml` -> the `cp3{...}` selector on every leg
 - `README.md` -> the interpreter list under Install

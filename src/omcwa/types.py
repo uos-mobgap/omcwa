@@ -5,17 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from omcwa import _native
 
 
 @dataclass
 class Calibration:
     """Accelerometer calibration parameters.
 
-    Produced by omconvert auto-calibrate, or via ``identity()`` for a no-op.
+    Produced by omconvert auto-calibrate, or by ``identity()`` for a
+    calibration that leaves acceleration unchanged.
     """
 
     scale: npt.NDArray[np.float64]  # shape (3,)
@@ -39,7 +43,7 @@ class Calibration:
     mean_svm_error: float = 0.0
 
     @classmethod
-    def from_native(cls, native_cal: Any) -> Calibration:
+    def from_native(cls, native_cal: _native.Calibration) -> Calibration:
         """Construct from an ``omcwa._native.Calibration`` instance."""
         return cls(
             scale=np.asarray(native_cal.scale, dtype=np.float64),
@@ -57,7 +61,7 @@ class Calibration:
 
     @classmethod
     def identity(cls) -> Calibration:
-        """Return identity (no-op) calibration parameters."""
+        """Return identity calibration parameters."""
         return cls(
             scale=np.ones(3, dtype=np.float64),
             offset=np.zeros(3, dtype=np.float64),

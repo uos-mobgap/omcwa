@@ -9,6 +9,9 @@ from omcwa.defaults import (
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
     USE_FILE_SAMPLE_RATE,
+    CalibrationFailurePolicy,
+    CalibrationSource,
+    Dtype,
     InterpolateMode,
 )
 from omcwa.process import CalibrationError, load_cwa, process_cwa
@@ -28,6 +31,9 @@ __all__ = [
     "Calibration",
     "UniformRecording",
     "ProcessedRecording",
+    "CalibrationFailurePolicy",
+    "CalibrationSource",
+    "Dtype",
     "InterpolateMode",
     "DEFAULT_SAMPLE_RATE_HZ",
     "DEFAULT_INTERPOLATE",
