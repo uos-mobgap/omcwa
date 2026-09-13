@@ -35,12 +35,12 @@ The compatibility calibration path, `calibration_source="player"`, is the one to
 
 The supported range is declared in the four places `coding-standards.md` lists. Widen it only after the build legs have produced and imported a wheel for the new interpreter, never in advance. Claiming support for an interpreter nothing was built on is the mistake v0.1.1 corrects.
 
-A new CPython version is supported within three months of its final release. NumPy sets that pace. Every leg installs NumPy to run its import test under `PIP_ONLY_BINARY=numpy`, so the leg fails until a NumPy wheel exists for the new interpreter.
+No date is promised for a new interpreter. NumPy is the gate in practice. Every leg installs NumPy to run its import test under `PIP_ONLY_BINARY=numpy`, so a leg fails until a NumPy wheel exists for the new CPython.
 
-CPython 3.15 reaches its final release on 1 October 2026 ([PEP 790](https://peps.python.org/pep-0790/)). The range stops at 3.14 today, which puts 3.15 due by January 2027.
+CPython 3.15 reaches its final release on 1 October 2026 ([PEP 790](https://peps.python.org/pep-0790/)). The range stops at 3.14 today, so 3.15 is the next one to go through this.
 
 ### Platforms
 
 A platform is dropped when CI can no longer build it on a runner native to its architecture, and the drop is announced in the changelog entry for the release that makes it. `adr/0004-build-wheels-on-native-runners.md` covers why an emulated or cross-compiled leg is not an alternative.
 
-macOS x86_64 has no wheel and is not getting one. GitHub's last Intel macOS image, `macos-15-intel`, is available until August 2027, and a leg with that much life left in it is not worth adopting. Intel Macs build from source, as the README says.
+There is no macOS x86_64 wheel and no leg for one. Intel Macs build from source, as the README says. Adding a leg later would mean taking on GitHub's last Intel image, `macos-15-intel`, which retires in August 2027, so that option has a closing date on it.
