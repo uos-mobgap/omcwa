@@ -68,13 +68,12 @@ uv run pytest benchmarks --cwa-hours 10 --cwa-device AX3
 
 | `--cwa-hours` | File size (AX6) | Peak output memory | `test_process_cwa` time | Use                                             |
 | ------------- | --------------- | ------------------ | ----------------------- | ----------------------------------------------- |
-| `1`           | 4.6 MB          | 24 MB              | ~0.2 s                  | Catch large regressions                         |
-| `10`          | 46 MB           | 238 MB             | ~2.0 s                  | Compare branches                                |
-| `100`         | 461 MB          | 2.4 GB             | ~17 s                   | Longer look                                     |
-| `200`         | 922 MB          | 4.8 GB             | ~33 s                   | Pre-release, max expected file                  |
+| `1`           | 4.6 MB          | 23 MB              | ~0.2 s                  | Catch large regressions                         |
+| `10`          | 46 MB           | 227 MB             | ~2.0 s                  | Compare branches                                |
+| `100`         | 461 MB          | 2.2 GB             | ~17 s                   | Longer look                                     |
+| `200`         | 922 MB          | 4.4 GB             | ~33 s                   | Pre-release, max expected file                  |
 
-Peak output memory is about 66 bytes per sample. If the machine starts
-swapping, the timings are junk.
+The peak output figure is `resample`, the heaviest of the five stages at 66 bytes per sample. `process_cwa` allocates 50. If the machine starts swapping, the timings are junk.
 
 ## What is measured
 
@@ -98,12 +97,13 @@ Memory tests use the same synthetic recording as the timing tests and print:
 ```
 ---------------- memory: ax6-1h.cwa, 360,000 samples -----------------
 Stage                   Peak RSS     Output arrays    Bytes per sample
-load                     34.2 MB            0.0 MB                 0.0
-auto_calibrate           33.5 MB            0.0 MB                 0.0
-resample                 56.3 MB           22.7 MB                66.0
-load_cwa                 55.8 MB           22.7 MB                66.0
-process_cwa              56.5 MB           22.7 MB                66.0
+load                     36.0 MB            0.0 MB                 0.0
+auto_calibrate           36.6 MB            0.0 MB                 0.0
+resample                 58.2 MB           22.7 MB                66.0
+load_cwa                 55.5 MB           19.9 MB                58.0
+process_cwa              53.2 MB           17.2 MB                50.0
 ----------------------------------------------------------------------
+Peak RSS includes 4.4 MB of memory-mapped recording, which is clean and evictable.
 ```
 
 Peak RSS is the high-water mark for the process during that stage. Each stage
@@ -117,9 +117,7 @@ Bytes per sample is `output arrays / sample count`. Dtypes and counts are
 fixed across platforms and file sizes, so `test_memory.py` asserts the exact
 value. That is the regression check.
 
-`process_cwa` builds a temperature array during resample and then drops it,
-because `ProcessedRecording` does not keep temperature. Peak allocation
-matches `resample` at 66 B/sample.
+The three stages that allocate output differ by the arrays they ask the native stage for. `resample` calls it with its defaults and gets all of them. `load_cwa` skips the time array, which a `UniformRecording` computes from `start_time`. `process_cwa` skips temperature as well, which a `ProcessedRecording` does not carry.
 
 ### Running a stage by hand
 
