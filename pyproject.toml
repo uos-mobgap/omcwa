@@ -26,6 +26,7 @@ Issues = "https://github.com/uos-mobgap/omcwa/issues"
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=2.3",
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.15.21",
@@ -45,6 +46,7 @@ showcase = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.3",
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.15.21",
@@ -69,6 +71,13 @@ minimum-version = "0.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# py.typed promises the annotations are right. Nothing but this check holds
+# the package to it.
+[tool.mypy]
+files = ["src/omcwa", "tests/typing"]
+python_version = "3.11"
+strict = true
 
 # No fail_under. Coverage is a number to read, and nothing gates on it.
 [tool.coverage.run]
