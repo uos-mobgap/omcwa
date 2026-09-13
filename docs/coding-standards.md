@@ -63,6 +63,18 @@ Not enforced yet.
 Vendored omconvert is pinned separately in
 `native/vendored/omconvert/OMCONVERT_VERSION` (git commit SHA).
 
+## Licence files
+
+Every wheel ships the licence text for each piece of code inside it, listed in `pyproject.toml` under `[project].license-files`:
+
+- `LICENSE`, omcwa's own
+- `THIRD_PARTY_NOTICES.md`, covering vendored omconvert and the Microsoft Visual C++ runtime DLL that delvewheel copies into the Windows wheels
+- `native/vendored/omconvert/LICENSE`
+
+Declaring the list turns off scikit-build-core's default globs, so a new licence or notice file at the root ships only once it is added here.
+
+`README.md` points readers at the same paths under License. Nothing checks that the two agree, so change them together.
+
 ## Supported Python versions
 
 The supported range is declared in four places. Change them together:
