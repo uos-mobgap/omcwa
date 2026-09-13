@@ -29,8 +29,8 @@ from omcwa.types import (
     ensure_path_str,
 )
 
-# The runtime check and the annotation come from the same alias, so a new
-# option cannot be accepted by one and refused by the other.
+# The check and the message both come from the alias, so a new option cannot
+# be accepted by one and left out of the other.
 _FAILURE_POLICIES: Final = get_args(CalibrationFailurePolicy)
 _CALIBRATION_SOURCES: Final = get_args(CalibrationSource)
 _DTYPES: Final = get_args(Dtype)
@@ -57,30 +57,34 @@ class CalibrationError(RuntimeError):
         )
 
 
+def _validate_choice(name: str, value: str, options: tuple[str, ...]) -> str:
+    """Return ``value`` when it is one of ``options``, else raise."""
+    if value not in options:
+        allowed = " or ".join(repr(option) for option in options)
+        msg = f"{name} must be {allowed}, got {value!r}"
+        raise ValueError(msg)
+    return value
+
+
 def _validate_failure_policy(
     on_calibration_failure: str,
 ) -> CalibrationFailurePolicy:
-    if on_calibration_failure not in _FAILURE_POLICIES:
-        msg = (
-            "on_calibration_failure must be 'raise' or 'identity', "
-            f"got {on_calibration_failure!r}"
-        )
-        raise ValueError(msg)
-    return cast("CalibrationFailurePolicy", on_calibration_failure)
+    checked = _validate_choice(
+        "on_calibration_failure", on_calibration_failure, _FAILURE_POLICIES
+    )
+    return cast("CalibrationFailurePolicy", checked)
 
 
 def _validate_dtype(dtype: str) -> Dtype:
-    if dtype not in _DTYPES:
-        msg = f"dtype must be 'float64' or 'float32', got {dtype!r}"
-        raise ValueError(msg)
-    return cast("Dtype", dtype)
+    checked = _validate_choice("dtype", dtype, _DTYPES)
+    return cast("Dtype", checked)
 
 
 def _validate_calibration_source(source: str) -> CalibrationSource:
-    if source not in _CALIBRATION_SOURCES:
-        msg = f"calibration_source must be 'data' or 'player', got {source!r}"
-        raise ValueError(msg)
-    return cast("CalibrationSource", source)
+    checked = _validate_choice(
+        "calibration_source", source, _CALIBRATION_SOURCES
+    )
+    return cast("CalibrationSource", checked)
 
 
 def _public_metadata(
