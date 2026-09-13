@@ -54,8 +54,7 @@ Not enforced yet.
 
 ## Package version
 
-`0.1.0` is declared in three places. Bump them together, following
-`releasing.md`:
+`0.1.0` is declared in three places. Bump them together, following `releasing.md`:
 
 - `pyproject.toml` -> `[project].version`
 - `src/omcwa/__init__.py` -> `__version__`

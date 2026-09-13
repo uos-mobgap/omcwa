@@ -223,41 +223,28 @@ it, and a NaN bound raises `ValueError`, the same as `time_range`.
 
 ## Memory
 
-omcwa processes a recording whole and holds it whole, so the output costs a
-fixed number of bytes per sample:
+omcwa processes a recording whole and holds it whole, so the output costs a fixed number of bytes per sample:
 
 | Device                          | `float64` (default) |   `float32` |
 | ------------------------------- | ------------------: | ----------: |
 | AX6, acceleration and gyroscope |         50 B/sample | 26 B/sample |
 | AX3, acceleration only          |         26 B/sample | 14 B/sample |
 
-`dtype="float32"` halves `acc` and `gyr`, and that is the only difference
-between the two columns. `time` stays `float64` either way, and it is
-computed rather than stored, so it costs nothing until you read it and 8
-bytes per sample afterwards.
+`dtype="float32"` halves `acc` and `gyr`, and that is the only difference between the two columns. `time` stays `float64` either way, and it is computed rather than stored, so it costs nothing until you read it and 8 bytes per sample afterwards.
 
-An hour at 100 Hz is 360,000 samples. A week of AX6 is therefore 60.5 million
-samples and 2.8 GB of output, or 1.5 GB at `float32`.
+An hour at 100 Hz is 360,000 samples. A week of AX6 is therefore 60.5 million samples and 2.8 GB of output, or 1.5 GB at `float32`.
 
-Peak resident memory runs above the output arrays, by the recording omcwa maps
-and the structures omconvert allocates while decoding it. The benchmark
-suite's top row is 200 hours of AX6 at 100 Hz, a 922 MB file of 72 million
-samples. `process_cwa` allocates 3.4 GB of output for that one and peaks at
-4.1 GB resident on a 16 GB M1 Pro. Nothing longer is tested.
+Peak resident memory runs above the output arrays, by the recording omcwa maps and the structures omconvert allocates while decoding it. The benchmark suite's top row is 200 hours of AX6 at 100 Hz, a 922 MB file of 72 million samples. `process_cwa` allocates 3.4 GB of output for that one and peaks at 4.1 GB resident on a 16 GB M1 Pro. Nothing longer is tested.
 
-`benchmarks/test_memory.py` asserts the `float64` column on every run, so
-those two figures cannot drift from the code without the suite failing. The
-`float32` column is measured, not asserted.
+`benchmarks/test_memory.py` asserts the `float64` column on every run, so those two figures cannot drift from the code without the suite failing. The `float32` column is measured, not asserted.
 
 ## Current limits
 
-- omcwa decodes, calibrates and resamples a recording in full, and holds the
-result in full.
+- omcwa decodes, calibrates and resamples a recording in full, and holds the result in full.
 - `time_range` trims after processing. Decode, calibration, resampling, and
 peak memory still cover the full session.
 - Native processing takes the first session in a CWA file.
-- One recording at a time in one process. Batch and fleet runs need native
-windowing and chunked output, which are their own design and PR.
+- One recording at a time in one process. Batch and fleet runs need native windowing and chunked output, which are their own design and PR.
 
 ## Reproducible tests
 
