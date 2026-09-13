@@ -5,10 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from omcwa import _native
 
 
 @dataclass
@@ -39,7 +42,7 @@ class Calibration:
     mean_svm_error: float = 0.0
 
     @classmethod
-    def from_native(cls, native_cal: Any) -> Calibration:
+    def from_native(cls, native_cal: _native.Calibration) -> Calibration:
         """Construct from an ``omcwa._native.Calibration`` instance."""
         return cls(
             scale=np.asarray(native_cal.scale, dtype=np.float64),

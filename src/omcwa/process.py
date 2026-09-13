@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, cast, get_args
 
 import numpy as np
 
@@ -17,6 +17,9 @@ from omcwa.defaults import (
     DEFAULT_SAMPLE_RATE_HZ,
     DEFAULT_STATIONARY_TIME,
     USE_FILE_SAMPLE_RATE,
+    CalibrationFailurePolicy,
+    CalibrationSource,
+    Dtype,
 )
 from omcwa.slice import slice_recording
 from omcwa.types import (
@@ -26,9 +29,11 @@ from omcwa.types import (
     ensure_path_str,
 )
 
-CalibrationFailurePolicy = Literal["raise", "identity"]
-CalibrationSource = Literal["data", "player"]
-Dtype = Literal["float64", "float32"]
+# The runtime check and the annotation come from the same alias, so a new
+# option cannot be accepted by one and refused by the other.
+_FAILURE_POLICIES: Final = get_args(CalibrationFailurePolicy)
+_CALIBRATION_SOURCES: Final = get_args(CalibrationSource)
+_DTYPES: Final = get_args(Dtype)
 
 
 class CalibrationError(RuntimeError):
@@ -55,31 +60,31 @@ class CalibrationError(RuntimeError):
 def _validate_failure_policy(
     on_calibration_failure: str,
 ) -> CalibrationFailurePolicy:
-    if on_calibration_failure not in {"raise", "identity"}:
+    if on_calibration_failure not in _FAILURE_POLICIES:
         msg = (
             "on_calibration_failure must be 'raise' or 'identity', "
             f"got {on_calibration_failure!r}"
         )
         raise ValueError(msg)
-    return on_calibration_failure
+    return cast("CalibrationFailurePolicy", on_calibration_failure)
 
 
 def _validate_dtype(dtype: str) -> Dtype:
-    if dtype not in {"float64", "float32"}:
+    if dtype not in _DTYPES:
         msg = f"dtype must be 'float64' or 'float32', got {dtype!r}"
         raise ValueError(msg)
-    return dtype
+    return cast("Dtype", dtype)
 
 
 def _validate_calibration_source(source: str) -> CalibrationSource:
-    if source not in {"data", "player"}:
+    if source not in _CALIBRATION_SOURCES:
         msg = f"calibration_source must be 'data' or 'player', got {source!r}"
         raise ValueError(msg)
-    return source
+    return cast("CalibrationSource", source)
 
 
 def _public_metadata(
-    loaded: Any,
+    loaded: _native.LoadedCwa,
     *,
     sample_rate_hz: float,
 ) -> dict[str, Any]:
