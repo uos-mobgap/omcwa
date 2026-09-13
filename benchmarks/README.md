@@ -65,7 +65,7 @@ uv run pytest benchmarks --cwa-hours 10 --cwa-device AX3
 | `100`         | 461 MB          | 2.2 GB             | ~17 s                   | Longer look                                     |
 | `200`         | 922 MB          | 4.4 GB             | ~33 s                   | Pre-release, max expected file                  |
 
-The peak output figure is `resample`, the heaviest of the five stages at 66 bytes per sample. `process_cwa` allocates 50. File sizes are decimal, as the filesystem reports them. Memory figures are binary, matching what the suite prints. If the machine starts swapping, the timings are junk.
+The peak output figure is `resample`, the heaviest stage at 66 bytes per sample. `process_cwa` allocates 50. File sizes are decimal, as the filesystem reports them. Memory figures are binary, matching what the suite prints. If the machine starts swapping, the timings are junk.
 
 ## What is measured
 
@@ -76,7 +76,7 @@ The peak output figure is `resample`, the heaviest of the five stages at 66 byte
 | `test_resample`       | Uniform interpolation and output arrays                           |
 | `test_process_cwa`    | Full pipeline: load, auto_calibrate, resample                     |
 
-The first three share a pre-loaded recording, so load time is not counted twice. `test_process_cwa` should land near the sum of the other three.
+`test_load`, `test_auto_calibrate` and `test_resample` share a pre-loaded recording, so load time is not counted twice. `test_process_cwa` should land near the sum of the other three.
 
 `test_load` reads through `mmap`. After the first run the file is in the OS page cache, so you are timing decode, not disk.
 
@@ -102,7 +102,7 @@ Output arrays are NumPy allocations via `tracemalloc`. They do not include `omco
 
 Bytes per sample is `output arrays / sample count`. Dtypes and counts are fixed across platforms and file sizes, so `test_memory.py` asserts the exact value. That is the regression check.
 
-The three stages that allocate output differ by the arrays they ask the native stage for. `resample` calls it with its defaults and gets all of them. `load_cwa` skips the time array, which a `UniformRecording` computes from `start_time`. `process_cwa` skips temperature as well, which a `ProcessedRecording` does not carry.
+The stages that allocate output differ by the arrays they ask the native stage for. `resample` calls it with its defaults and gets all of them. `load_cwa` skips the time array, which a `UniformRecording` computes from `start_time`. `process_cwa` skips temperature as well, which a `ProcessedRecording` does not carry.
 
 ### Running a stage by hand
 

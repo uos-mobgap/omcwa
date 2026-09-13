@@ -91,7 +91,7 @@ Either bound may be infinite, which leaves that end open. A bound outside the re
 
 ## Relationship to omconvert
 
-omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing it, and it patches that code where the patches earn their keep. `native/VENDORING.md` tracks every local change against the pinned upstream commit. Two are performance-only and leave output byte-identical. The third changes how omconvert locates calibration temperature on AX6, so AX6 coefficients differ from stock omconvert. AX3 output is unchanged. `docs/adr/0002-ax6-calibration-temperature-offset.md` has the detail.
+omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing it, and it patches that code where the patches earn their keep. `native/VENDORING.md` tracks every local change against the pinned upstream commit. They are performance-only apart from the AX6 calibration temperature fix, which makes AX6 coefficients differ from stock omconvert. AX3 output is unchanged. `docs/adr/0002-ax6-calibration-temperature-offset.md` has the detail.
 
 The default `calibration_source="data"` calibrates straight from CWA sectors, for both AX3 and AX6, and skips the interpolating-player pass. Pass `calibration_source="player"` to reproduce `omconvert`'s original path, or `on_calibration_failure="identity"` to reproduce its identity fallback, when a downstream pipeline needs `omconvert`'s exact original numbers.
 

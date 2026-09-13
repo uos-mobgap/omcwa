@@ -1,6 +1,6 @@
 # Vendoring omconvert
 
-`native/vendored/omconvert/` is OpenMovement omconvert at the commit recorded in `OMCONVERT_VERSION`, plus three local changes. The exact delta against unmodified upstream:
+`native/vendored/omconvert/` is OpenMovement omconvert at the commit recorded in `OMCONVERT_VERSION`, plus the local changes below. The exact delta against unmodified upstream:
 
 ```bash
 ./scripts/vendor_diff.sh          # full diff
@@ -15,7 +15,7 @@ Branch `vendor/omconvert` holds an unmodified upstream snapshot in the same path
 
 ## Local changes
 
-The first two changes are performance-only and leave numerical output unchanged. The AX6 calibration fix changes coefficients because it replaces an interpolated scan with the existing direct-data algorithm. The old player scan remains selectable for compatibility.
+The timestamp and interpolator changes are performance-only and leave numerical output unchanged. The AX6 calibration fix changes coefficients because it replaces an interpolated scan with the existing direct-data algorithm. The old player scan remains selectable for compatibility.
 
 ### Replace `timegm()` in `omdata.c`
 
@@ -49,7 +49,7 @@ The patch reads temperature from byte 20 for every CWA sector and lets AX6 use t
 
 There is no re-vendor script. `vendor/omconvert` is a pin of unmodified omconvert at the `OMCONVERT_VERSION` commit.
 
-If that pin ever has to move, copy the new upstream sources onto `vendor/omconvert` at the same paths under `native/vendored/omconvert/`, commit there, and `git merge vendor/omconvert` into the working branch. Conflicts arrive as markers in the C files. Then `./scripts/vendor_diff.sh --stat` to confirm the local delta is still the three local changes.
+If that pin ever has to move, copy the new upstream sources onto `vendor/omconvert` at the same paths under `native/vendored/omconvert/`, commit there, and `git merge vendor/omconvert` into the working branch. Conflicts arrive as markers in the C files. Then `./scripts/vendor_diff.sh --stat` to confirm the delta still matches the Local changes section.
 
 ## What belongs in the vendored tree
 
