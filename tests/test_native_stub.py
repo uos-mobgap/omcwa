@@ -2,7 +2,7 @@
 
 The stub is the only description of the native surface a type checker
 sees, and nothing at build time compares it to the compiled module. These
-tests do, in both directions, over every public name.
+tests do, over every public name and every parameter name behind it.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 import omcwa
 from omcwa import _native
@@ -20,6 +21,17 @@ STUB_PATH = PACKAGE_DIR / "_native.pyi"
 
 def _public(names: Iterable[str]) -> set[str]:
     return {name for name in names if not name.startswith("_")}
+
+
+def _parameters(arguments: ast.arguments) -> list[str]:
+    return [
+        argument.arg
+        for argument in (
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+        )
+    ]
 
 
 def _declared(body: list[ast.stmt]) -> set[str]:
@@ -47,6 +59,38 @@ def _stub_classes() -> dict[str, set[str]]:
     }
 
 
+def _stub_signatures() -> dict[str, list[str]]:
+    """Map every stub callable to its parameter names, keyed by dotted path."""
+    signatures: dict[str, list[str]] = {}
+    for node in _stub_body():
+        if isinstance(node, ast.FunctionDef):
+            signatures[node.name] = _parameters(node.args)
+        elif isinstance(node, ast.ClassDef):
+            signatures.update(
+                {
+                    f"{node.name}.{method.name}": _parameters(method.args)
+                    for method in node.body
+                    if isinstance(method, ast.FunctionDef)
+                }
+            )
+    return signatures
+
+
+def _runtime_parameters(obj: Any) -> list[str]:
+    """Read parameter names off pybind11's signature docstring line."""
+    signature = (obj.__doc__ or "").splitlines()[0]
+    definition = ast.parse(f"def {signature}: ...").body[0]
+    assert isinstance(definition, ast.FunctionDef)
+    return _parameters(definition.args)
+
+
+def _runtime_attribute(dotted: str) -> Any:
+    target: Any = _native
+    for part in dotted.split("."):
+        target = getattr(target, part)
+    return target
+
+
 def test_the_package_is_marked_typed() -> None:
     assert (PACKAGE_DIR / "py.typed").is_file()
 
@@ -64,3 +108,12 @@ def test_the_stub_covers_every_class_surface() -> None:
         name: _public(dir(getattr(_native, name))) for name in _stub_classes()
     }
     assert _stub_classes() == runtime
+
+
+def test_the_stub_names_the_parameters_the_module_takes() -> None:
+    """A renamed ``py::arg`` reaches every call site through the stub."""
+    runtime = {
+        dotted: _runtime_parameters(_runtime_attribute(dotted))
+        for dotted in _stub_signatures()
+    }
+    assert _stub_signatures() == runtime
