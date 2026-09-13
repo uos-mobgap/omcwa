@@ -12,10 +12,13 @@ The GitHub release body is written for the release page. It is not copied from t
 
 ## Cutting a release
 
-1. Dispatch the wheels workflow with scope `full`. Confirm every leg green and twenty wheels present.
-2. Bump the version in the three places `coding-standards.md` lists.
-3. Land the changelog entry.
-4. Tag, then publish the release so the workflow attaches the wheels.
+1. Bump the version in the three places `coding-standards.md` lists.
+2. Land the changelog entry.
+3. Dispatch the wheels workflow with scope `full` against the commit to be tagged. Confirm every leg green and twenty wheels present.
+4. Tag that commit.
+5. Create the release.
+
+No tag is created before a full-matrix run on the commit being tagged has been confirmed green with twenty wheels.
 
 A published tag is never deleted or moved.
 
