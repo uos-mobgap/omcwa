@@ -236,7 +236,7 @@ An hour at 100 Hz is 360,000 samples. A week of AX6 is therefore 60.5 million sa
 
 Peak resident memory runs above the output arrays, by the recording omcwa maps and the structures omconvert allocates while decoding it. The benchmark suite's top row is 200 hours of AX6 at 100 Hz, a 922 MB file of 72 million samples. `process_cwa` allocates 3.4 GB of output for that one and peaks at 4.1 GB resident on a 16 GB M1 Pro. Nothing longer is tested.
 
-`benchmarks/test_memory.py` asserts the `float64` column on every run, so those two figures cannot drift from the code without the suite failing. The `float32` column is measured, not asserted.
+`benchmarks/test_memory.py` asserts the `float64` column on every run. The `float32` column is measured, not asserted.
 
 ## Current limits
 

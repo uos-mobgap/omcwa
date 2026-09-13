@@ -1,6 +1,6 @@
 # Changelog
 
-Every released version has an entry here. Breaking changes come first in an entry, under their own heading, so an upgrade decision does not depend on reading to the end.
+Every released version has an entry here. Breaking changes come first in an entry, under their own heading.
 
 omcwa is 0.x, so a minor version may break the API. `docs/releasing.md` holds the release process and the support policy for platforms and interpreters.
 
@@ -33,7 +33,7 @@ The extension also releases the GIL around the native load and calibration loops
 
 ### Wheels
 
-The release carries nine wheels: Linux x86_64, macOS arm64 and Windows amd64, for CPython 3.11, 3.12 and 3.13. Its own notes promised twenty, across five platforms and CPython 3.11 to 3.14. Two build legs failed and the 3.14 selector matched nothing. Anything not on that list builds from source.
+The release carries nine wheels: Linux x86_64, macOS arm64 and Windows amd64, for CPython 3.11, 3.12 and 3.13. Its own notes promised twenty, across five platforms and CPython 3.11 to 3.14. Anything not on that list builds from source.
 
 ### Limits
 
