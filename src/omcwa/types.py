@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 class Calibration:
     """Accelerometer calibration parameters.
 
-    Produced by omconvert auto-calibrate, or via ``identity()`` for a no-op.
+    Produced by omconvert auto-calibrate, or by ``identity()`` for a
+    calibration that leaves acceleration unchanged.
     """
 
     scale: npt.NDArray[np.float64]  # shape (3,)
@@ -60,7 +61,7 @@ class Calibration:
 
     @classmethod
     def identity(cls) -> Calibration:
-        """Return identity (no-op) calibration parameters."""
+        """Return identity calibration parameters."""
         return cls(
             scale=np.ones(3, dtype=np.float64),
             offset=np.zeros(3, dtype=np.float64),

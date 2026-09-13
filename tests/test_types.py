@@ -18,7 +18,7 @@ from omcwa import Calibration, _native
 FIELD_NAMES = [field.name for field in dataclasses.fields(Calibration)]
 
 
-def test_identity_is_the_no_op_calibration() -> None:
+def test_identity_leaves_acceleration_unchanged() -> None:
     identity = Calibration.identity()
 
     assert_array_equal(identity.scale, np.ones(3))
