@@ -3,30 +3,12 @@
 from __future__ import annotations
 
 from math import ceil, isnan
-from typing import overload
+from typing import TypeVar, cast, overload
 
 import numpy as np
+import numpy.typing as npt
 
 from omcwa.types import ProcessedRecording, UniformRecording
-
-
-@overload
-def slice_recording(
-    recording: UniformRecording,
-    *,
-    start: float | None = None,
-    stop: float | None = None,
-) -> UniformRecording: ...
-
-
-@overload
-def slice_recording(
-    recording: ProcessedRecording,
-    *,
-    start: float | None = None,
-    stop: float | None = None,
-) -> ProcessedRecording: ...
-
 
 # ceil((t - start_time) * sample_rate_hz) is the exact real-number formula
 # for "first sample index with time >= t" on a uniform grid. In float64,
@@ -37,6 +19,12 @@ def slice_recording(
 # 100 Hz recording; this margin absorbs it while staying far too small to
 # affect a genuinely non-aligned start/stop.
 _INDEX_ROUNDING_MARGIN = 1e-4
+
+_ArrayT = TypeVar("_ArrayT", bound=np.ndarray)
+
+# A window is either a contiguous index range or, off the uniform grid, a
+# per-sample mask.
+_SliceKey = slice | npt.NDArray[np.bool_]
 
 
 def _index_at_or_after(
@@ -98,12 +86,12 @@ def _reject_nan(name: str, bound: float | None) -> None:
 
 
 def _time_mask(
-    time: np.ndarray,
+    time: npt.NDArray[np.float64],
     *,
     start: float | None,
     stop: float | None,
-) -> np.ndarray:
-    mask = np.ones(time.shape[0], dtype=bool)
+) -> npt.NDArray[np.bool_]:
+    mask = np.ones(time.shape[0], dtype=np.bool_)
     if start is not None:
         mask &= time >= start
     if stop is not None:
@@ -111,13 +99,38 @@ def _time_mask(
     return mask
 
 
-def _slice_array(
-    array: np.ndarray | None,
-    key: slice | np.ndarray,
-) -> np.ndarray | None:
+def _slice_array(array: _ArrayT, key: _SliceKey) -> _ArrayT:
+    """Apply a window to an array, keeping its dtype.
+
+    ``ndarray.__getitem__`` is typed as returning ``dtype[Any]``, so the
+    cast restores what both a slice and a boolean mask preserve.
+    """
+    return cast("_ArrayT", array[key])
+
+
+def _slice_optional(array: _ArrayT | None, key: _SliceKey) -> _ArrayT | None:
+    """Apply a window to an array that a recording may not carry."""
     if array is None:
         return None
-    return array[key]
+    return _slice_array(array, key)
+
+
+@overload
+def slice_recording(
+    recording: UniformRecording,
+    *,
+    start: float | None = None,
+    stop: float | None = None,
+) -> UniformRecording: ...
+
+
+@overload
+def slice_recording(
+    recording: ProcessedRecording,
+    *,
+    start: float | None = None,
+    stop: float | None = None,
+) -> ProcessedRecording: ...
 
 
 def slice_recording(
@@ -146,7 +159,7 @@ def slice_recording(
 
     if recording.time_override is None:
         first, last = _sample_bounds(recording, start=start, stop=stop)
-        key: slice | np.ndarray = slice(first, last)
+        key: _SliceKey = slice(first, last)
         new_start_time = recording.start_time + first / recording.sample_rate_hz
         new_time_override = None
     else:
@@ -160,7 +173,7 @@ def slice_recording(
         start_time=new_start_time,
         n_samples=new_acc.shape[0],
         acc=new_acc,
-        gyr=_slice_array(recording.gyr, key),
+        gyr=_slice_optional(recording.gyr, key),
         metadata=dict(recording.metadata),
         time_override=new_time_override,
     )
