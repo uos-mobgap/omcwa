@@ -2,26 +2,34 @@
 
 ## Python (`src/omcwa/`, `tests/`)
 
-We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
+We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy.readthedocs.io/) for type checking.
 
 ```bash
 uv sync --group dev
 uv run ruff check src tests
 uv run ruff format src tests
+uv run mypy
 ```
 
-Settings are in `pyproject.toml` under `[tool.ruff]`.
+Settings are in `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`.
 
 ### Conventions
 
 - Public functions and classes need short, formal docstrings.
 - Public APIs need type hints.
+- `src/omcwa/py.typed` publishes those hints. mypy runs strict over `src/omcwa` and stays clean.
+- No public return type is `Any`. `metadata: dict[str, Any]` is the one exception.
+- `tests/typing/` holds type-level checks of the public API. mypy is their runner. pytest collects nothing there.
 
 ### Defaults
 
-Pipeline defaults live in `src/omcwa/defaults.py` (`InterpolateMode`,
+Pipeline defaults live in `src/omcwa/defaults.py` (`InterpolateMode`, the
+`CalibrationFailurePolicy`, `CalibrationSource` and `Dtype` aliases,
 `DEFAULT_*`, `USE_FILE_SAMPLE_RATE`). Keep them in sync with
 `native/omcwa_defaults.h`.
+
+Every `DEFAULT_*` carries a `Final` annotation naming the type its parameter
+accepts.
 
 ## C++ (`native/bridge.cpp`, `native/omconvert_extern.h`, `native/omcwa_defaults.h`)
 
@@ -47,6 +55,9 @@ changes in `native/VENDORING.md`.
   in sync with `src/omcwa/defaults.py`.
 - Comments that document omconvert behaviour end with a `ref:` line pointing at
   `vendored/omconvert/...`.
+- A name exported from `PYBIND11_MODULE` needs an entry in
+  `src/omcwa/_native.pyi`. `tests/test_native_stub.py` compares the two in
+  both directions.
 
 ### clang-tidy
 
