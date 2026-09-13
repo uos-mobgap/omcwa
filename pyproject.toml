@@ -8,6 +8,11 @@ version = "0.1.0"
 description = "CWA load, calibrate, and resample via vendored OpenMovement omconvert"
 readme = "README.md"
 license = "BSD-2-Clause"
+license-files = [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "native/vendored/omconvert/LICENSE",
+]
 requires-python = ">=3.11,<3.15"
 dependencies = [
     "numpy>=1.25",
