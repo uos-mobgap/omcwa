@@ -85,15 +85,15 @@ recording = process_cwa(
 )
 ```
 
-## Relationship to omconvert
-
-omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing it, and it patches that code where the patches earn their keep. `native/VENDORING.md` tracks every local change against the pinned upstream commit. Two are performance-only and leave output byte-identical. The third is a correctness fix: AX6 sectors put gyroscope axes before the accelerometer, which broke `omconvert`'s own proxy for locating calibration temperature and forced AX6 through a slower interpolating "player" pass to get a usable fit.
-
-The default `calibration_source="data"` reads temperature from its actual fixed sector offset and calibrates straight from CWA sectors, for both AX3 and AX6. It avoids the interpolating-player pass entirely. Pass `calibration_source="player"` to reproduce `omconvert`'s original path, or `on_calibration_failure="identity"` to reproduce its identity fallback, when a downstream pipeline needs `omconvert`'s exact original numbers.
-
 `time_range=(start, stop)` is a half-open interval in Unix seconds, `start <= time < stop`. Calibration and resampling still run on the full session. The range trims the finished output.
 
 Either bound may be infinite, which leaves that end open. A bound outside the recording clamps to it, so a range that misses the session returns `n_samples=0`. A NaN bound raises `ValueError`.
+
+## Relationship to omconvert
+
+omcwa vendors OpenMovement's `omconvert` C code rather than reimplementing it, and it patches that code where the patches earn their keep. `native/VENDORING.md` tracks every local change against the pinned upstream commit. Two are performance-only and leave output byte-identical. The third changes how omconvert locates calibration temperature on AX6, so AX6 coefficients differ from stock omconvert. AX3 output is unchanged. `docs/adr/0002-ax6-calibration-temperature-offset.md` has the detail.
+
+The default `calibration_source="data"` calibrates straight from CWA sectors, for both AX3 and AX6, and skips the interpolating-player pass. Pass `calibration_source="player"` to reproduce `omconvert`'s original path, or `on_calibration_failure="identity"` to reproduce its identity fallback, when a downstream pipeline needs `omconvert`'s exact original numbers.
 
 ## Calibration failures
 
