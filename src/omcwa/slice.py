@@ -102,8 +102,8 @@ def _time_mask(
 def _slice_array(array: _ArrayT, key: _SliceKey) -> _ArrayT:
     """Apply a window to an array, keeping its dtype.
 
-    ``ndarray.__getitem__`` is typed as returning ``dtype[Any]``, so the
-    cast restores what both a slice and a boolean mask preserve.
+    ``ndarray.__getitem__`` is typed as returning ``dtype[Any]``. Neither
+    a slice nor a boolean mask changes the dtype, so the cast puts it back.
     """
     return cast("_ArrayT", array[key])
 

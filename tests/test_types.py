@@ -1,8 +1,8 @@
 """``Calibration`` construction.
 
 ``Calibration.identity()`` is public API, while every pipeline path takes
-the native identity calibration instead. These tests are what keeps the two
-from drifting apart.
+the native identity calibration instead. Nothing else keeps the two in
+agreement.
 """
 
 from __future__ import annotations
