@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Final, cast, get_args
+from typing import Any, Final, TypeVar, get_args
 
 import numpy as np
 
@@ -31,9 +31,15 @@ from omcwa.types import (
 
 # The check and the message both come from the alias, so a new option cannot
 # be accepted by one and left out of the other.
-_FAILURE_POLICIES: Final = get_args(CalibrationFailurePolicy)
-_CALIBRATION_SOURCES: Final = get_args(CalibrationSource)
-_DTYPES: Final = get_args(Dtype)
+_FAILURE_POLICIES: Final[tuple[CalibrationFailurePolicy, ...]] = get_args(
+    CalibrationFailurePolicy
+)
+_CALIBRATION_SOURCES: Final[tuple[CalibrationSource, ...]] = get_args(
+    CalibrationSource
+)
+_DTYPES: Final[tuple[Dtype, ...]] = get_args(Dtype)
+
+_OptionT = TypeVar("_OptionT", bound=str)
 
 
 class CalibrationError(RuntimeError):
@@ -57,34 +63,16 @@ class CalibrationError(RuntimeError):
         )
 
 
-def _validate_choice(name: str, value: str, options: tuple[str, ...]) -> str:
+def _validate_choice(
+    name: str, value: str, options: tuple[_OptionT, ...]
+) -> _OptionT:
     """Return ``value`` when it is one of ``options``, else raise."""
-    if value not in options:
-        allowed = " or ".join(repr(option) for option in options)
-        msg = f"{name} must be {allowed}, got {value!r}"
-        raise ValueError(msg)
-    return value
-
-
-def _validate_failure_policy(
-    on_calibration_failure: str,
-) -> CalibrationFailurePolicy:
-    checked = _validate_choice(
-        "on_calibration_failure", on_calibration_failure, _FAILURE_POLICIES
-    )
-    return cast("CalibrationFailurePolicy", checked)
-
-
-def _validate_dtype(dtype: str) -> Dtype:
-    checked = _validate_choice("dtype", dtype, _DTYPES)
-    return cast("Dtype", checked)
-
-
-def _validate_calibration_source(source: str) -> CalibrationSource:
-    checked = _validate_choice(
-        "calibration_source", source, _CALIBRATION_SOURCES
-    )
-    return cast("CalibrationSource", checked)
+    for option in options:
+        if value == option:
+            return option
+    allowed = " or ".join(repr(option) for option in options)
+    msg = f"{name} must be {allowed}, got {value!r}"
+    raise ValueError(msg)
 
 
 def _public_metadata(
@@ -136,7 +124,7 @@ def load_cwa(
     ``dtype="float64"`` matches every consumer today. ``"float32"`` halves
     ``acc``/``gyr`` memory. ``temp`` and ``time`` stay float64 regardless.
     """
-    output_dtype = _validate_dtype(dtype)
+    output_dtype = _validate_choice("dtype", dtype, _DTYPES)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
     result = loaded.resample(
@@ -198,9 +186,13 @@ def process_cwa(
     within one float32 ULP of the float64 result, but verify against a
     downstream pipeline before switching its default.
     """
-    failure_policy = _validate_failure_policy(on_calibration_failure)
-    source = _validate_calibration_source(calibration_source)
-    output_dtype = _validate_dtype(dtype)
+    failure_policy = _validate_choice(
+        "on_calibration_failure", on_calibration_failure, _FAILURE_POLICIES
+    )
+    source = _validate_choice(
+        "calibration_source", calibration_source, _CALIBRATION_SOURCES
+    )
+    output_dtype = _validate_choice("dtype", dtype, _DTYPES)
     path_str = ensure_path_str(path)
     loaded = _native.LoadedCwa.load(path_str)
 
