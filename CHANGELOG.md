@@ -1,7 +1,5 @@
 # Changelog
 
-Every released version has an entry here. Breaking changes come first in an entry, under their own heading.
-
 omcwa is 0.x, so a minor version may break the API. `docs/releasing.md` holds the release process and the support policy for platforms and interpreters.
 
 ## 0.1.0 (2026-08-23)

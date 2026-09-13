@@ -11,9 +11,7 @@ That is `git diff vendor/omconvert -- native/vendored/omconvert/`.
 
 ## Why a vendor branch
 
-Branch `vendor/omconvert` holds an unmodified upstream snapshot in the same paths. The working branch merges from it, so a later upstream update is a normal three-way merge with conflict markers in the C files.
-
-`git diff vendor/omconvert -- native/vendored/omconvert/` cannot go stale. It is the live delta, not a replay script you have to keep in sync by hand.
+Branch `vendor/omconvert` holds an unmodified upstream snapshot in the same paths. The working branch merges from it, so a later upstream update is a normal three-way merge with conflict markers in the C files. `docs/adr/0001-vendor-omconvert-on-a-branch.md` records the decision.
 
 ## Local changes
 
@@ -27,7 +25,7 @@ The first two changes are performance-only and leave numerical output unchanged.
 
 The replacement is Howard Hinnant's days-from-civil algorithm, public domain, measured at 2 ns/call. CWA timestamps are UTC civil time with no DST and no leap seconds, so nothing `timegm()` does beyond the arithmetic is needed here.
 
-On the 931.5 MB file, `OmDataLoad` went 16.84 s -> 0.23 s.
+On the 931.5 MB file, `OmDataLoad` went 16.84 s to 0.23 s.
 
 The win is smaller on glibc, whose `timegm()` is faster than Apple's, but the lock and TZ check are still wasted work on every platform.
 
@@ -37,7 +35,7 @@ The win is smaller on glibc, whose `timegm()` is faster than Apple's, but the lo
 
 Seeks only ever move forwards, so consecutive windows overlap. A 4-row sliding cache in `interpolator_t` shifts the retained rows instead of re-decoding them.
 
-On the 931.5 MB file that is 905 M -> 155 M calls, 2.05 per sample. Resample went 7.91 s -> 6.12 s, 23% faster. The wall-clock gain is much smaller than the call reduction because the decode itself is cheap. The rest is per-sample loop overhead.
+On the 931.5 MB file that is 905 M to 155 M calls, 2.05 per sample. Resample went 7.91 s to 6.12 s, 23% faster. The wall-clock gain is much smaller than the call reduction because the decode itself is cheap. The rest is per-sample loop overhead.
 
 The cache is only used for a strictly contiguous window. Near segment boundaries `idx[]` contains clamped duplicates. There the original full fetch runs and the cache is invalidated. It is also invalidated when the interpolator advances to a new segment.
 
@@ -47,11 +45,9 @@ The cache is only used for a strictly contiguous window. Near segment boundaries
 
 The patch reads temperature from byte 20 for every CWA sector and lets AX6 use the direct-data path. This removes a full interpolating-player pass during calibration. Omconvert's existing `-calibrate 2` setting still forces the player path. The Python API exposes the same choice as `calibration_source="player"`.
 
-All three changes are candidates for upstreaming to https://github.com/openmovementproject/openmovement. If they land upstream, the corresponding delta here disappears on the next merge from `vendor/omconvert`.
-
 ## Updating upstream
 
-There is no re-vendor script. `vendor/omconvert` is a pin of unmodified omconvert at the `OMCONVERT_VERSION` commit, and the working branch is not overwritten from a sibling checkout.
+There is no re-vendor script. `vendor/omconvert` is a pin of unmodified omconvert at the `OMCONVERT_VERSION` commit.
 
 If that pin ever has to move, copy the new upstream sources onto `vendor/omconvert` at the same paths under `native/vendored/omconvert/`, commit there, and `git merge vendor/omconvert` into the working branch. Conflicts arrive as markers in the C files. Then `./scripts/vendor_diff.sh --stat` to confirm the local delta is still the three local changes.
 

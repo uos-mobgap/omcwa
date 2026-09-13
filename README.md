@@ -2,7 +2,7 @@
 
 omcwa loads OpenMovement `.cwa` recordings from AX3 and AX6 devices. It runs omconvert-compatible accelerometer auto-calibration, then resamples to uniform NumPy arrays.
 
-Version 0.1 has one CWA-to-NumPy pipeline. The vendored OpenMovement C code runs behind pybind11.
+The vendored OpenMovement C code runs behind pybind11.
 
 ## Install
 
@@ -97,7 +97,7 @@ Either bound may be infinite, which leaves that end open. A bound outside the re
 
 ## Calibration failures
 
-Strict failure is the default. `CalibrationError` is a `RuntimeError`. The native omconvert code is on `error.error_code`. The synthetic fixtures cover the common `-1` (too few stationary points) and `-2` (no usable axis fit) outcomes.
+Strict failure is the default. `CalibrationError` is a `RuntimeError`. The native omconvert code is on `error.error_code`. The codes you will actually see are `-1`, too few stationary points, and `-2`, no usable axis fit.
 
 If you are going to keep uncalibrated acceleration, pass identity fallback:
 
@@ -133,7 +133,7 @@ To skip fitting, pass `calibrate=False`. The returned `Calibration` is a success
 
 `acc` and `gyr` are `float64` unless you pass `dtype="float32"` to `process_cwa`. `time` stays `float64` regardless, since it carries the full Unix-epoch magnitude.
 
-`time` is computed, not stored. While `time_override` is `None`, every sample sits on the grid that `start_time` and `sample_rate_hz` describe, and the first read of `time` builds the array from those two. A recording that has left that grid carries its timestamps in `time_override` instead, and `time` returns that array unchanged. Nothing in the library sets `time_override` today, so it is `None` on anything `process_cwa` or `load_cwa` returns. It is there for a recording with samples dropped out of the middle, where no single rate describes what is left. `slice_recording` carries it onto the window it returns.
+`time` is computed, not stored. While `time_override` is `None`, every sample sits on the grid that `start_time` and `sample_rate_hz` describe, and the first read of `time` builds the array from those two. A recording that has left that grid carries its timestamps in `time_override` instead, and `time` returns that array unchanged. Nothing in the library sets `time_override`, so it is `None` on anything `process_cwa` or `load_cwa` returns. `slice_recording` carries it onto the window it returns.
 
 AX3 recordings usually have acceleration only. AX6 recordings usually have acceleration and gyroscope. Auto-calibration corrects the accelerometer. Gyroscope values are scaled to physical units.
 
@@ -182,12 +182,12 @@ Peak resident memory runs above the output arrays, by the recording omcwa maps a
 
 `benchmarks/test_memory.py` asserts the `float64` column on every run. The `float32` column is measured, not asserted.
 
-## Current limits
+## Limits
 
 - omcwa decodes, calibrates and resamples a recording in full, and holds the result in full.
 - `time_range` trims after processing. Decode, calibration, resampling, and peak memory still cover the full session.
 - Native processing takes the first session in a CWA file.
-- One recording at a time in one process. Batch and fleet runs need native windowing and chunked output, which are their own design and PR.
+- One recording at a time in one process. Batch runs would need native windowing and chunked output, and omcwa has neither.
 
 ## Reproducible tests
 

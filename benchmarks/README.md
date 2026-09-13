@@ -16,8 +16,6 @@ python -m pytest benchmarks
 
 ## Design
 
-Two pieces.
-
 `synthetic_cwa.py` writes deterministic CWA files in Python and NumPy at about 350 MB/s. No `omsynth`, no participant recordings. Sector layout matches `native/vendored/omconvert/omdata.c` and was checked against real AX6 files.
 
 `test_pipeline.py` times the pipeline with `pytest-benchmark`. It handles warmup, outlier filtering, stats, and branch comparison.
@@ -31,7 +29,7 @@ The question this suite answers is "did this change make the pipeline slower?" I
 | `synthetic_cwa.py`      | Deterministic synthetic CWA files of arbitrary duration                  |
 | `conftest.py`           | Pytest CLI flags, shared fixtures, and memory summary reporter           |
 | `test_pipeline.py`      | Pipeline timing                                                          |
-| `memory.py`             | Subprocess harness for peak RSS and output array allocation              |
+| `memory.py`             | Subprocess runner for peak RSS and output array allocation               |
 | `test_memory.py`        | Memory regression assertions per pipeline stage                          |
 | `test_synthetic_cwa.py` | Correctness and format checks for the synthetic generator                |
 | `.cache/`               | Local cache for generated CWA files, ignored by Git                      |
@@ -174,7 +172,7 @@ Cached files sit in `benchmarks/.cache/`:
 rm -rf benchmarks/.cache
 ```
 
-## Known limitations
+## Limits
 
 The last fraction of a second has no temperature. `omconvert` will not interpolate past the last sector, so those samples read as the raw zero, about -20.5 °C. Real CWA files do the same.
 
