@@ -53,3 +53,6 @@ benchmarks/.cache/
 
 # Local scratch notes and working files
 .scratch/
+
+# working document, references another project's internals
+docs/performance-plan.md
