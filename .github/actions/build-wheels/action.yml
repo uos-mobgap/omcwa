@@ -57,7 +57,10 @@ runs:
         # platform tag on a published wheel
         CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
         CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
-        CIBW_TEST_COMMAND: "python -c \"import omcwa; print(omcwa.__version__)\""
+        # the script imports the wheel and checks it carries py.typed and
+        # _native.pyi. Without those two a downstream type checker ignores
+        # the package, and nothing at import time would say so
+        CIBW_TEST_COMMAND: "python {project}/scripts/check_installed_package.py"
         CIBW_TEST_REQUIRES: "numpy"
         CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=numpy"
 

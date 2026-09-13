@@ -75,7 +75,7 @@ testpaths = ["tests"]
 # py.typed promises the annotations are right. Nothing but this check holds
 # the package to it.
 [tool.mypy]
-files = ["src/omcwa", "tests/typing"]
+files = ["src/omcwa", "tests/typing", "scripts"]
 python_version = "3.11"
 strict = true
 
