@@ -18,16 +18,11 @@ python -m pytest benchmarks
 
 Two pieces.
 
-`synthetic_cwa.py` writes deterministic CWA files in Python and NumPy at about
-350 MB/s. No `omsynth`, no participant recordings. Sector layout matches
-`native/vendored/omconvert/omdata.c` and was checked against real AX6 files.
+`synthetic_cwa.py` writes deterministic CWA files in Python and NumPy at about 350 MB/s. No `omsynth`, no participant recordings. Sector layout matches `native/vendored/omconvert/omdata.c` and was checked against real AX6 files.
 
-`test_pipeline.py` times the pipeline with `pytest-benchmark`. It handles
-warmup, outlier filtering, stats, and branch comparison.
+`test_pipeline.py` times the pipeline with `pytest-benchmark`. It handles warmup, outlier filtering, stats, and branch comparison.
 
-The question this suite answers is "did this change make the pipeline slower?"
-It is not a profiler. If a run regresses and you need per-function detail, use
-`perf`, Instruments, or `py-spy`.
+The question this suite answers is "did this change make the pipeline slower?" It is not a profiler. If a run regresses and you need per-function detail, use `perf`, Instruments, or `py-spy`.
 
 ## Layout
 
@@ -41,8 +36,7 @@ It is not a profiler. If a run regresses and you need per-function detail, use
 | `test_synthetic_cwa.py` | Correctness and format checks for the synthetic generator                |
 | `.cache/`               | Local cache for generated CWA files, ignored by Git                      |
 
-`test_synthetic_cwa.py` is a normal test, not a benchmark. It checks that the
-generator writes valid CWA before anything is timed.
+`test_synthetic_cwa.py` is a normal test, not a benchmark. It checks that the generator writes valid CWA before anything is timed.
 
 ## Running
 
@@ -84,11 +78,9 @@ The peak output figure is `resample`, the heaviest of the five stages at 66 byte
 | `test_resample`       | Uniform interpolation and output arrays                           |
 | `test_process_cwa`    | Full pipeline: load, auto_calibrate, resample                     |
 
-The first three share a pre-loaded recording, so load time is not counted
-twice. `test_process_cwa` should land near the sum of the other three.
+The first three share a pre-loaded recording, so load time is not counted twice. `test_process_cwa` should land near the sum of the other three.
 
-`test_load` reads through `mmap`. After the first run the file is in the OS
-page cache, so you are timing decode, not disk.
+`test_load` reads through `mmap`. After the first run the file is in the OS page cache, so you are timing decode, not disk.
 
 ## Memory
 
@@ -106,16 +98,11 @@ process_cwa              53.2 MB           17.2 MB                50.0
 Peak RSS includes 4.4 MB of memory-mapped recording, which is clean and evictable.
 ```
 
-Peak RSS is the high-water mark for the process during that stage. Each stage
-runs in its own subprocess so the numbers do not leak across stages. mmap
-pages count.
+Peak RSS is the high-water mark for the process during that stage. Each stage runs in its own subprocess so the numbers do not leak across stages. mmap pages count.
 
-Output arrays are NumPy allocations via `tracemalloc`. They do not include
-`omconvert` `malloc` structures.
+Output arrays are NumPy allocations via `tracemalloc`. They do not include `omconvert` `malloc` structures.
 
-Bytes per sample is `output arrays / sample count`. Dtypes and counts are
-fixed across platforms and file sizes, so `test_memory.py` asserts the exact
-value. That is the regression check.
+Bytes per sample is `output arrays / sample count`. Dtypes and counts are fixed across platforms and file sizes, so `test_memory.py` asserts the exact value. That is the regression check.
 
 The three stages that allocate output differ by the arrays they ask the native stage for. `resample` calls it with its defaults and gets all of them. `load_cwa` skips the time array, which a `UniformRecording` computes from `start_time`. `process_cwa` skips temperature as well, which a `ProcessedRecording` does not carry.
 
@@ -139,14 +126,11 @@ uv pip install -e . --no-deps
 uv run pytest benchmarks --cwa-hours 10 --benchmark-compare=0001 --benchmark-compare-fail=mean:5%
 ```
 
-`--benchmark-compare-fail=mean:5%` fails the run if mean time gets more than
-5% worse. Saved runs live in `.benchmarks/`.
+`--benchmark-compare-fail=mean:5%` fails the run if mean time gets more than 5% worse. Saved runs live in `.benchmarks/`.
 
-Reinstall after every branch switch (`uv pip install -e . --no-deps` or
-`pip install -e . --no-deps`) or you are still timing the old C++ extension.
+Reinstall after every branch switch (`uv pip install -e . --no-deps` or `pip install -e . --no-deps`) or you are still timing the old C++ extension.
 
-VMs and shared CI runners jitter by around ±10%. Small deltas need a quiet
-machine.
+VMs and shared CI runners jitter by around ±10%. Small deltas need a quiet machine.
 
 ### Example comparison
 
@@ -170,23 +154,17 @@ machine.
 
 A 200-second cycle, repeated.
 
-Eight 20 s stationary holds, one per orientation, so auto-calibration gets
-sphere coverage. 20 s is twice the 10 s calibration window, so a full window
-still lands even if sample boundaries are unlucky.
+Eight 20 s stationary holds, one per orientation, so auto-calibration gets sphere coverage. 20 s is twice the 10 s calibration window, so a full window still lands even if sample boundaries are unlucky.
 
 Then 40 s of multi-frequency sinusoids on accel and gyro.
 
-The accelerometer also gets synthetic scale, offset, and temperature error so
-the fit has something real to do.
-`test_auto_calibration_recovers_the_injected_error` checks that.
+The accelerometer also gets synthetic scale, offset, and temperature error so the fit has something real to do. `test_auto_calibration_recovers_the_injected_error` checks that.
 
-No RNG. Same CLI flags produce byte-identical CWA files, which is why
-`.cache/` can key on the filename.
+No RNG. Same CLI flags produce byte-identical CWA files, which is why `.cache/` can key on the filename.
 
 ## Cross-platform notes
 
-The writer is Python, NumPy, and little-endian dtypes (`<i2`, `<i4`, `<f8`).
-Files match across architectures and OSes.
+The writer is Python, NumPy, and little-endian dtypes (`<i2`, `<i4`, `<f8`). Files match across architectures and OSes.
 
 Peak RSS uses `resource.getrusage` on macOS and Linux, `psutil` on Windows.
 
@@ -198,12 +176,9 @@ rm -rf benchmarks/.cache
 
 ## Known limitations
 
-The last fraction of a second has no temperature. `omconvert` will not
-interpolate past the last sector, so those samples read as the raw zero, about
--20.5 °C. Real CWA files do the same.
+The last fraction of a second has no temperature. `omconvert` will not interpolate past the last sector, so those samples read as the raw zero, about -20.5 °C. Real CWA files do the same.
 
-Requested durations round up to a whole sector. Exact duration and sample
-count are on `RecordingSpec.duration_s` and `RecordingSpec.sample_count`.
+Requested durations round up to a whole sector. Exact duration and sample count are on `RecordingSpec.duration_s` and `RecordingSpec.sample_count`.
 
 The signal is continuous. No clock drift, packet loss, or corrupt sectors.
 
@@ -211,8 +186,7 @@ The signal is continuous. No clock drift, packet loss, or corrupt sectors.
 
 ### Timing
 
-Put a test in `test_pipeline.py` that takes the `benchmark` fixture and a
-recording fixture from `conftest.py`:
+Put a test in `test_pipeline.py` that takes the `benchmark` fixture and a recording fixture from `conftest.py`:
 
 ```python
 def test_new_feature(benchmark, loaded_cwa):
@@ -225,8 +199,7 @@ Assert the return value so a silent no-op does not look fast.
 
 ### Memory stage
 
-1. Add the stage to `STAGES` in `memory.py`. Return the number of output
-samples, or `0` if it allocates no NumPy arrays.
+1. Add the stage to `STAGES` in `memory.py`. Return the number of output samples, or `0` if it allocates no NumPy arrays.
 2. If it allocates output arrays, add the name to `STAGES_WITH_OUTPUT`.
 3. `test_memory.py` picks it up across the parameterised runs.
 
