@@ -54,6 +54,8 @@ uv add "git+https://github.com/uos-mobgap/omcwa.git"
 Append `@<tag>` to pin a release. Building from source, from a checkout or
 from git, needs Python 3.11-3.14 and a C++17 toolchain.
 
+[CHANGELOG.md](CHANGELOG.md) records what changed in each release.
+
 ## Quickstart
 
 ```python
@@ -219,14 +221,43 @@ The window is half-open, `start <= time < stop`. Omit either bound, or pass
 an infinity, to leave that end open. A bound outside the recording clamps to
 it, and a NaN bound raises `ValueError`, the same as `time_range`.
 
+## Memory
+
+omcwa processes a recording whole and holds it whole, so the output costs a
+fixed number of bytes per sample:
+
+| Device                          | `float64` (default) |   `float32` |
+| ------------------------------- | ------------------: | ----------: |
+| AX6, acceleration and gyroscope |         50 B/sample | 26 B/sample |
+| AX3, acceleration only          |         26 B/sample | 14 B/sample |
+
+`dtype="float32"` halves `acc` and `gyr`, and that is the only difference
+between the two columns. `time` stays `float64` either way, and it is
+computed rather than stored, so it costs nothing until you read it and 8
+bytes per sample afterwards.
+
+An hour at 100 Hz is 360,000 samples. A week of AX6 is therefore 60.5 million
+samples and 2.8 GB of output, or 1.5 GB at `float32`.
+
+Peak resident memory runs above the output arrays, by the recording omcwa maps
+and the structures omconvert allocates while decoding it. The largest
+recording the benchmark suite is run on before a release is 200 hours of AX6
+at 100 Hz, a 922 MB file of 72 million samples. `process_cwa` allocates 3.4 GB
+of output for that one and peaks at 4.1 GB resident on a 16 GB M1 Pro. Nothing
+above that length is tested.
+
+`benchmarks/test_memory.py` asserts the per-sample figures on every run, so
+the table cannot drift from the code without the suite failing.
+
 ## Current limits
 
-- The whole CWA and the whole resampled output sit in memory.
+- omcwa decodes, calibrates and resamples a recording in full, and holds the
+result in full.
 - `time_range` trims after processing. Decode, calibration, resampling, and
 peak memory still cover the full session.
 - Native processing takes the first session in a CWA file.
-- Do not point 0.1 at 1 GB recordings or a fleet. Native windowing and
-chunked output need their own design and PR.
+- One recording at a time in one process. Batch and fleet runs need native
+windowing and chunked output, which are their own design and PR.
 
 ## Reproducible tests
 
