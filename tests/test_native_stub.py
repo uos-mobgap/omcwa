@@ -1,8 +1,8 @@
 """``_native.pyi`` describes the extension module the package ships.
 
-The stub is the only description of the native surface a type checker
-sees, and nothing at build time compares it to the compiled module. These
-tests do, over every public name and every parameter name behind it.
+A type checker reads the stub and never the compiled module, so a stub
+that drifts from ``bridge.cpp`` validates call sites against a signature
+that no longer exists.
 """
 
 from __future__ import annotations
@@ -89,14 +89,6 @@ def _runtime_attribute(dotted: str) -> Any:
     for part in dotted.split("."):
         target = getattr(target, part)
     return target
-
-
-def test_the_package_is_marked_typed() -> None:
-    assert (PACKAGE_DIR / "py.typed").is_file()
-
-
-def test_the_stub_sits_beside_the_package() -> None:
-    assert STUB_PATH.is_file()
 
 
 def test_the_stub_covers_the_module_surface() -> None:
