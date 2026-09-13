@@ -6,11 +6,9 @@
 its entry has landed on `main`, so a tag cannot exist that the changelog does
 not account for.
 
-An entry is written at release time from the pull requests merged since the
-last tag. There is no "unreleased" section, because a second place to write
-things down is a second place for them to go stale.
-
-Breaking changes come first in an entry, under their own heading.
+Write the entry at release time, from the pull requests merged since the last
+tag. There is no "unreleased" section, because a second place to write things
+down is a second place for them to go stale.
 
 ## The release body is not a second changelog
 
@@ -39,8 +37,8 @@ getting what they fetched.
 
 ## Stability
 
-omcwa is 0.x. A minor version may break the API, and a break is announced at
-the top of its changelog entry rather than through a deprecation cycle.
+omcwa is 0.x. A minor version may break the API, and a break goes at the top
+of its changelog entry rather than through a deprecation cycle.
 
 The compatibility calibration path, `calibration_source="player"`, is the one
 to watch. `adr/0002-ax6-calibration-temperature-offset.md` records that it may
@@ -51,12 +49,12 @@ be removed if the fix reaches upstream omconvert.
 ### Python
 
 The supported range is declared in the four places `coding-standards.md`
-lists. It is widened only after the build legs have produced and imported a
-wheel for the new interpreter, never in advance. Claiming support for an
-interpreter nothing was built on is the mistake v0.1.1 corrects.
+lists. Widen it only after the build legs have produced and imported a wheel
+for the new interpreter, never in advance. Claiming support for an interpreter
+nothing was built on is the mistake v0.1.1 corrects.
 
 A new CPython version is supported within three months of its final release.
-NumPy sets that pace: every leg installs NumPy to run its import test under
+NumPy sets that pace. Every leg installs NumPy to run its import test under
 `PIP_ONLY_BINARY=numpy`, so the leg fails until a NumPy wheel exists for the
 new interpreter.
 

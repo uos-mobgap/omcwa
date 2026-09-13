@@ -1,12 +1,11 @@
 # Changelog
 
-Every released version has an entry here, and the entry lands before the tag,
-so no release exists that this file does not account for. Breaking changes
-come first in an entry, under their own heading, so an upgrade decision does
-not depend on reading to the end.
+Every released version has an entry here. Breaking changes come first in an
+entry, under their own heading, so an upgrade decision does not depend on
+reading to the end.
 
-omcwa is 0.x. A minor version may break the API. `docs/releasing.md` holds the
-release process and the support policy for platforms and interpreters.
+omcwa is 0.x, so a minor version may break the API. `docs/releasing.md` holds
+the release process and the support policy for platforms and interpreters.
 
 ## 0.1.0 (2026-08-23)
 
