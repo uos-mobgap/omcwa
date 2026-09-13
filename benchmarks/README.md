@@ -67,7 +67,7 @@ uv run pytest benchmarks --cwa-hours 10 --cwa-device AX3
 | `100`         | 461 MB          | 2.2 GB             | ~17 s                   | Longer look                                     |
 | `200`         | 922 MB          | 4.4 GB             | ~33 s                   | Pre-release, max expected file                  |
 
-The peak output figure is `resample`, the heaviest of the five stages at 66 bytes per sample. `process_cwa` allocates 50. If the machine starts swapping, the timings are junk.
+The peak output figure is `resample`, the heaviest of the five stages at 66 bytes per sample. `process_cwa` allocates 50. File sizes are decimal, as the filesystem reports them. Memory figures are binary, matching what the suite prints. If the machine starts swapping, the timings are junk.
 
 ## What is measured
 
@@ -134,14 +134,14 @@ VMs and shared CI runners jitter by around ±10%. Small deltas need a quiet mach
 
 ### Example comparison
 
-10-hour AX6 recording, Apple M1 Pro, optimised branch vs baseline:
+10-hour AX6 recording on an Apple M1 Pro, macOS, Python 3.14.3. These are the native performance patches from #3, against the commit before them.
 
-| Benchmark             | Baseline | Optimised | Difference |
-| --------------------- | -------- | --------- | ---------- |
-| `test_load`           | 820 ms   | 9.9 ms    | 83x faster |
-| `test_auto_calibrate` | 389 ms   | 308 ms    | 21% faster |
-| `test_resample`       | 421 ms   | 324 ms    | 23% faster |
-| `test_process_cwa`    | 1620 ms  | 659 ms    | 2.5x faster |
+| Benchmark             | Before  | After   | Difference  |
+| --------------------- | ------- | ------- | ----------- |
+| `test_load`           | 805 ms  | 10.0 ms | 80x faster  |
+| `test_auto_calibrate` | 390 ms  | 51.9 ms | 7.5x faster |
+| `test_resample`       | 422 ms  | 326 ms  | 23% faster  |
+| `test_process_cwa`    | 1649 ms | 380 ms  | 4.3x faster |
 
 ## Synthetic recording
 

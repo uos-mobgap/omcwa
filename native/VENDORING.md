@@ -53,7 +53,7 @@ All three changes are candidates for upstreaming to https://github.com/openmovem
 
 There is no re-vendor script. `vendor/omconvert` is a pin of unmodified omconvert at the `OMCONVERT_VERSION` commit, and the working branch is not overwritten from a sibling checkout.
 
-If that pin ever has to move, copy the new upstream sources onto `vendor/omconvert` at the same paths under `native/vendored/omconvert/`, commit there, and `git merge vendor/omconvert` into the working branch. Conflicts arrive as markers in the C files. Then `./scripts/vendor_diff.sh --stat` to confirm the local delta is still only the two performance changes, or the subset that has not landed upstream.
+If that pin ever has to move, copy the new upstream sources onto `vendor/omconvert` at the same paths under `native/vendored/omconvert/`, commit there, and `git merge vendor/omconvert` into the working branch. Conflicts arrive as markers in the C files. Then `./scripts/vendor_diff.sh --stat` to confirm the local delta is still the three local changes.
 
 ## What belongs in the vendored tree
 
