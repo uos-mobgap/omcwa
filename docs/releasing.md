@@ -12,11 +12,12 @@ The GitHub release body is written for the release page. It is not copied from t
 
 ## Cutting a release
 
-1. Bump the version in the three places `coding-standards.md` lists.
-2. Land the changelog entry.
-3. Dispatch the wheels workflow with scope `full` against the commit to be tagged. Confirm every leg green and twenty wheels present.
-4. Tag that commit.
-5. Create the release.
+1. Re-execute `examples/showcase_omcwa.ipynb` and read it. Every cell runs clean, the outputs are the committed ones, and nothing it claims names an API or a file that has since gone. Commit whatever changed. Nothing else checks it.
+2. Bump the version in the three places `coding-standards.md` lists.
+3. Land the changelog entry.
+4. Dispatch the wheels workflow with scope `full` against the commit to be tagged. Confirm every leg green and twenty wheels present.
+5. Tag that commit.
+6. Create the release.
 
 No tag is created before a full-matrix run on the commit being tagged has been confirmed green with twenty wheels.
 
