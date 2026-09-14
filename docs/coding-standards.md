@@ -20,7 +20,7 @@ Settings are in `pyproject.toml` under `[tool.ruff]` and `[tool.mypy]`.
 - `src/omcwa/py.typed` publishes those hints. mypy runs strict over `src/omcwa` and stays clean.
 - No public return type is `Any`. `metadata: dict[str, Any]` is the one exception.
 - `tests/typing/` holds type-level checks of the public API. mypy is their runner. pytest collects nothing there.
-- Every wheel carries `py.typed` and `_native.pyi`. `scripts/check_installed_package.py` asserts both, as the cibuildwheel test command on every leg.
+- Every wheel carries `py.typed` and `_native.pyi`, and reports the same version from every place that declares it. `scripts/check_installed_package.py` checks that, as the cibuildwheel test command on every leg.
 
 ### Defaults
 
@@ -71,6 +71,8 @@ Version is declared in three places. Bump them together, following `releasing.md
 - `pyproject.toml` -> `[project].version`
 - `src/omcwa/__init__.py` -> `__version__`
 - `native/bridge.cpp` -> `_native.version()`
+
+`tests/test_version.py` checks the three agree. `scripts/check_installed_package.py` checks the installed wheel.
 
 Vendored omconvert is pinned separately in
 `native/vendored/omconvert/OMCONVERT_VERSION` (git commit SHA).
