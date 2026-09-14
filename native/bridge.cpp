@@ -743,7 +743,7 @@ PYBIND11_MODULE(_native, m) {
     )doc";
 
     m.def(
-        "version", []() { return std::string("0.1.0"); },
+        "version", []() { return std::string("0.1.1"); },
         "Return the native extension version string.");
 
     py::class_<Calibration>(m, "Calibration",
