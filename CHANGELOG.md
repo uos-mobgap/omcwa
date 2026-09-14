@@ -2,6 +2,46 @@
 
 omcwa is 0.x, so a minor version may break the API. `docs/releasing.md` holds the release process and the support policy for platforms and interpreters.
 
+## 0.1.1 (2026-09-14)
+
+Twenty wheels, across five platforms and CPython 3.11 to 3.14. v0.1.0 stays published as a pre-release. Loading, calibration and resampling are unchanged.
+
+### Slicing returns a different window
+
+Three `slice_recording` bounds changed what they give back:
+
+- A window entirely before the recording returned almost all of it. It now returns an empty recording.
+- An infinite bound raised `OverflowError` on a uniform recording. It now means what an omitted bound means.
+- A NaN bound raises `ValueError`. On a non-uniform timeline it used to return an empty recording.
+
+`first_sample_time` raises `IndexError` on an empty recording. It used to return `start_time`.
+
+`slice_recording` imports from `omcwa`. v0.1.0 documented it and left it out of `__all__`.
+
+### Wheels
+
+Linux x86_64, Linux aarch64, macOS arm64, Windows amd64 and Windows arm64, each for CPython 3.11, 3.12, 3.13 and 3.14. v0.1.0 carried nine of those twenty. Every leg builds on a runner native to its architecture and fails when it produces fewer wheels than its selector names.
+
+A release carries the wheels from a full-matrix run confirmed before the tag. Publishing builds nothing.
+
+There is no macOS x86_64 wheel. Intel Macs build from source.
+
+### Types
+
+The package ships `py.typed` and `_native.pyi`, so a type checker reads omcwa's annotations instead of skipping the package.
+
+`slice_recording`'s overloads resolve, so a `ProcessedRecording` goes in and a `ProcessedRecording` comes back. `CalibrationFailurePolicy`, `CalibrationSource` and `Dtype` are exported, and every `DEFAULT_*` carries the type its parameter accepts, so `process_cwa(calibration_source=DEFAULT_CALIBRATION_SOURCE)` type checks.
+
+### Documentation
+
+Every field on both recording types is documented, `time_override` included.
+
+The README gives per-sample memory figures and a worked example in place of its warning against large recordings, with `dtype="float32"` beside them.
+
+### Licensing
+
+`LICENSE` names the University of Sheffield for omcwa's own code, under the same BSD-2-Clause terms. Upstream attribution stays in the vendored tree's own licence and in `THIRD_PARTY_NOTICES.md`. Every wheel carries all three files.
+
 ## 0.1.0 (2026-08-23)
 
 First release, published as a pre-release. omcwa loads OpenMovement `.cwa` recordings from AX3 and AX6 devices and resamples them to uniform NumPy arrays. Decoding and calibration run omconvert's own C code, vendored, not a Python reimplementation.

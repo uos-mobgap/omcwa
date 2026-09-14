@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "omcwa"
-version = "0.1.0"
+version = "0.1.1"
 description = "CWA load, calibrate, and resample via vendored OpenMovement omconvert"
 readme = "README.md"
 license = "BSD-2-Clause"

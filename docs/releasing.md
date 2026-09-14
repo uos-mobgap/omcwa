@@ -16,10 +16,19 @@ The GitHub release body is written for the release page. It is not copied from t
 2. Bump the version in the three places `coding-standards.md` lists.
 3. Land the changelog entry.
 4. Dispatch the wheels workflow with scope `full` against the commit to be tagged. Confirm every leg green and twenty wheels present.
-5. Tag that commit.
-6. Create the release.
+5. Tag that commit and push the tag.
+6. Download that run's wheels: `gh run download <run-id> --dir wheelhouse`. Five artifacts, twenty wheels.
+7. Create the draft release against the tag, carrying those wheels.
+
+   ```bash
+   gh release create <tag> --draft --verify-tag -F <body file> wheelhouse/*/*.whl
+   ```
+
+8. Read the draft, edit the body, publish it.
 
 No tag is created before a full-matrix run on the commit being tagged has been confirmed green with twenty wheels.
+
+Publishing a release builds nothing. Its assets are step 4's wheels. See `adr/0006-attach-the-wheels-the-matrix-tested.md`.
 
 A published tag is never deleted or moved.
 
@@ -31,7 +40,7 @@ omcwa is 0.x. A minor version may break the API, and a break goes at the top of 
 
 ### Python
 
-The supported range is declared in the four places `coding-standards.md` lists. Widen it only after the build legs have produced and imported a wheel for the new interpreter, never in advance.
+The supported range is declared in the five places `coding-standards.md` lists. Widen it only after the build legs have produced and imported a wheel for the new interpreter, never in advance.
 
 No date is promised for a new interpreter. NumPy is the gate in practice. Every leg installs NumPy to run its import test under `PIP_ONLY_BINARY=numpy`, so a leg fails until a NumPy wheel exists for the new CPython.
 
