@@ -1,8 +1,6 @@
 name: Wheels
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       scope:
@@ -25,8 +23,7 @@ jobs:
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
     env:
-      # a release builds every leg; only a dispatch can ask for a smoke run
-      SCOPE: ${{ inputs.scope || 'full' }}
+      SCOPE: ${{ inputs.scope }}
       # every leg must produce exactly one wheel per tag, asserted after the
       # build. Bump this together with the cp3{...} selectors below and with
       # requires-python in pyproject.toml
@@ -72,7 +69,7 @@ jobs:
     name: Wheels on ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
