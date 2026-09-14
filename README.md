@@ -256,12 +256,23 @@ That suite is not in the default `pytest` run. Details in [benchmarks/README.md]
 
 ## Showcase notebook
 
-`examples/showcase_omcwa.ipynb` walks through calibration, resampling, the `data`/`player` calibration-source parity check, and `dtype="float32"` memory savings, all on committed synthetic fixtures:
+`examples/showcase_omcwa.ipynb` walks through calibration, resampling, the `data`/`player` calibration-source parity check, `slice_recording` windows, and `dtype="float32"` memory savings, all on committed synthetic fixtures:
 
 ```bash
 uv sync --group showcase
 uv run jupyter lab examples/showcase_omcwa.ipynb
 ```
+
+Nothing checks the notebook. It is kept in sync by hand and read at release time, as `docs/releasing.md` says. After changing a cell, re-execute it and commit the outputs with it:
+
+```bash
+uv run jupyter nbconvert --to notebook --execute --inplace \
+  --ClearMetadataPreprocessor.enabled=True \
+  --ClearMetadataPreprocessor.clear_notebook_metadata=False \
+  examples/showcase_omcwa.ipynb
+```
+
+The `ClearMetadataPreprocessor` flags keep per-cell execution timestamps out of the diff.
 
 ## License
 
