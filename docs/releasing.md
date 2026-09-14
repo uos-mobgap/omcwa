@@ -40,7 +40,7 @@ omcwa is 0.x. A minor version may break the API, and a break goes at the top of 
 
 ### Python
 
-The supported range is declared in the four places `coding-standards.md` lists. Widen it only after the build legs have produced and imported a wheel for the new interpreter, never in advance.
+The supported range is declared in the five places `coding-standards.md` lists. Widen it only after the build legs have produced and imported a wheel for the new interpreter, never in advance.
 
 No date is promised for a new interpreter. NumPy is the gate in practice. Every leg installs NumPy to run its import test under `PIP_ONLY_BINARY=numpy`, so a leg fails until a NumPy wheel exists for the new CPython.
 
